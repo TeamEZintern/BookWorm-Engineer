@@ -36,7 +36,7 @@ client = OpenAI(
 # Main
 # ---------------------------------------------------------------------------
 
-if __name__ == "__main__":
+def main() -> None:
     system_prompt = f"""
 You are an advanced agent working inside a structured Harness Engineering pipeline.
 The repository state serves as your absolute system of record.
@@ -186,3 +186,6 @@ OPERATING MANDATE:
 
         except Exception as e:
             raise RuntimeError(f"Failed to generate response: {e}") from e
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bookworm-engineer"
+version = "0.1.0"
+description = "AI coding agent inspired by NotebookLM and opencode"
+requires-python = ">=3.10"
+dependencies = [
+    "openai",
+    "python-dotenv",
+]
+
+[project.scripts]
+bookworm = "bookworm:main"
