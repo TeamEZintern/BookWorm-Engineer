@@ -67,111 +67,122 @@ OPERATING MANDATE:
 """
     print(system_prompt, end="\n\n")
 
-    print("================= User Prompt ===============================", end="\n\n")
-    user_prompt = input("> ").strip()
-    print("")
-    print("================= Agent Output ===============================", end="\n\n")
-    start_time = time.time()
+    messages: list = []
 
-    messages: list = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user",   "content": user_prompt}
-    ]
+    while True:
+        print("================= User Prompt ===============================", end="\n\n")
+        user_prompt = input("> ").strip()
+        print("")
 
-    try:
-        # Agentic loop: keep going until the model stops calling tools.
-        # extra_body passes OpenRouter-specific parameters not in the OpenAI spec.
-        # include_reasoning exposes the model's reasoning tokens in reply.reasoning.
-        # See: https://openrouter.ai/docs/guides/best-practices/reasoning-tokens
-        while True:
-            response = client.chat.completions.create(
-                model=LLM_MODEL,
-                messages=messages,
-                tools=tools.schema,
-                extra_body={
-                    "reasoning": {
-                        "effort": "low"  # Maps to thinkingLevel: "low"
-                    }
-                },
-            )
+        if user_prompt.lower() in ("exit", "quit"):
+            print("Exiting BookWorm Engineer. Goodbye!")
+            break
 
-            # OpenAI SDK response schema: response.choices[0].message
-            reply = response.choices[0].message
-            # getattr(reply, "reasoning", None)
+        print("================= Agent Output ===============================", end="\n\n")
+        start_time = time.time()
 
-            if reply.reasoning: # pyright: ignore[reportAttributeAccessIssue]
-                print("Thinking: ", reply.reasoning, end="\n\n") # pyright: ignore[reportAttributeAccessIssue]
-            print("Content: ", reply.content, end="\n\n")
+        if not messages:
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": user_prompt}
+            ]
+        else:
+            messages.append({"role": "user", "content": user_prompt})
 
-            # Append assistant turn to history as a plain dict
-            messages.append({
-                "role":       "assistant",
-                "content":    reply.content or "",
-                "tool_calls": [
-                    {
-                        "id":   tc.id,
-                        "type": "function",
-                        "function": {
-                            "name":      tc.function.name, # pyright: ignore[reportAttributeAccessIssue]
-                            "arguments": tc.function.arguments # pyright: ignore[reportAttributeAccessIssue]
+        try:
+            # Agentic loop: keep going until the model stops calling tools.
+            # extra_body passes OpenRouter-specific parameters not in the OpenAI spec.
+            # include_reasoning exposes the model's reasoning tokens in reply.reasoning.
+            # See: https://openrouter.ai/docs/guides/best-practices/reasoning-tokens
+            while True:
+                response = client.chat.completions.create(
+                    model=LLM_MODEL,
+                    messages=messages,
+                    tools=tools.schema,
+                    extra_body={
+                        "reasoning": {
+                            "effort": "low"  # Maps to thinkingLevel: "low"
                         }
-                    }
-                    for tc in (reply.tool_calls or [])
-                ] or None
-            })
+                    },
+                )
 
-            tool_calls = reply.tool_calls or []
+                # OpenAI SDK response schema: response.choices[0].message
+                reply = response.choices[0].message
+                # getattr(reply, "reasoning", None)
 
-            if not tool_calls:
-                # No more tool calls — print the final reply and exit
-                elapsed = time.time() - start_time
-                hours, rem = divmod(elapsed, 3600)
-                minutes, seconds = divmod(rem, 60)
-                print(f"Time taken: {int(hours):02}:{int(minutes):02}:{seconds:05.2f}", end="\n\n")
-                break
+                if reply.reasoning: # pyright: ignore[reportAttributeAccessIssue]
+                    print("Thinking: ", reply.reasoning, end="\n\n") # pyright: ignore[reportAttributeAccessIssue]
+                print("Content: ", reply.content, end="\n\n")
 
-            # Execute each tool call and feed results back
-            for tc in tool_calls:
-                fn_name = tc.function.name # pyright: ignore[reportAttributeAccessIssue]
-                # arguments may be a dict already or a JSON string depending on the model
-                fn_args = tc.function.arguments # pyright: ignore[reportAttributeAccessIssue]
-                if isinstance(fn_args, str):
-                    fn_args = json.loads(fn_args)
-
-                msg = f"Calling {fn_name} with arguments {fn_args}"
-                print(msg if len(msg) <= 200 else msg[:200] + "… … …", end="\n\n")
-
-                if fn_name in tools.available_functions:
-                    try:
-                        result = tools.available_functions[fn_name](**fn_args)
-                    except TypeError as e:
-                        result = (
-                            f"Error calling {fn_name}: {e}. "
-                            "Tool calling must specify all arguments by name\n"
-                        )
-                else:
-                    result = f"Unknown tool: {fn_name}"
-
-                print(f"Result: {result}", end="\n\n")
-
-                # Tool result message — role must be "tool" with matching tool_call_id
+                # Append assistant turn to history as a plain dict
                 messages.append({
-                    "role":         "tool",
-                    "tool_call_id": tc.id,
-                    "content":      str(result)
+                    "role":       "assistant",
+                    "content":    reply.content or "",
+                    "tool_calls": [
+                        {
+                            "id":   tc.id,
+                            "type": "function",
+                            "function": {
+                                "name":      tc.function.name, # pyright: ignore[reportAttributeAccessIssue]
+                                "arguments": tc.function.arguments # pyright: ignore[reportAttributeAccessIssue]
+                            }
+                        }
+                        for tc in (reply.tool_calls or [])
+                    ] or None
                 })
-            
-                # HALLUNCINATION THRESHOLD tell the LLM to wrap up if Context Window fills beyond this threshold
-                if response.usage is not None:
-                    context_used = response.usage.prompt_tokens / CONTEXT_WINDOW
-                    if context_used >= HALLUNCINATION_THRESHOLD:
-                        messages.append({
-                            "role": "system",
-                            "content": f"WARNING: {context_used} of context window used. "
-                                        "You MUST conclude this processing loop as soon as possible.\n"
-                        })
-                        print(f"[WARNING]: {context_used} of context window used. Threshold is {HALLUNCINATION_THRESHOLD}.")
-                        break
 
-    except Exception as e:
-        raise RuntimeError(f"Failed to generate response: {e}") from e
+                tool_calls = reply.tool_calls or []
+
+                if not tool_calls:
+                    # No more tool calls — print the final reply and return to prompt loop
+                    elapsed = time.time() - start_time
+                    hours, rem = divmod(elapsed, 3600)
+                    minutes, seconds = divmod(rem, 60)
+                    print(f"Time taken: {int(hours):02}:{int(minutes):02}:{seconds:05.2f}", end="\n\n")
+                    break
+
+                # Execute each tool call and feed results back
+                for tc in tool_calls:
+                    fn_name = tc.function.name # pyright: ignore[reportAttributeAccessIssue]
+                    # arguments may be a dict already or a JSON string depending on the model
+                    fn_args = tc.function.arguments # pyright: ignore[reportAttributeAccessIssue]
+                    if isinstance(fn_args, str):
+                        fn_args = json.loads(fn_args)
+
+                    msg = f"Calling {fn_name} with arguments {fn_args}"
+                    print(msg if len(msg) <= 200 else msg[:200] + "… … …", end="\n\n")
+
+                    if fn_name in tools.available_functions:
+                        try:
+                            result = tools.available_functions[fn_name](**fn_args)
+                        except TypeError as e:
+                            result = (
+                                f"Error calling {fn_name}: {e}. "
+                                "Tool calling must specify all arguments by name\n"
+                            )
+                    else:
+                        result = f"Unknown tool: {fn_name}"
+
+                    print(f"Result: {result}", end="\n\n")
+
+                    # Tool result message — role must be "tool" with matching tool_call_id
+                    messages.append({
+                        "role":         "tool",
+                        "tool_call_id": tc.id,
+                        "content":      str(result)
+                    })
+                
+                    # HALLUNCINATION THRESHOLD tell the LLM to wrap up if Context Window fills beyond this threshold
+                    if response.usage is not None:
+                        context_used = response.usage.prompt_tokens / CONTEXT_WINDOW
+                        if context_used >= HALLUNCINATION_THRESHOLD:
+                            messages.append({
+                                "role": "system",
+                                "content": f"WARNING: {context_used} of context window used. "
+                                            "You MUST conclude this processing loop as soon as possible.\n"
+                            })
+                            print(f"[WARNING]: {context_used} of context window used. Threshold is {HALLUNCINATION_THRESHOLD}.")
+                            break
+
+        except Exception as e:
+            raise RuntimeError(f"Failed to generate response: {e}") from e
