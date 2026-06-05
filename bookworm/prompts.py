@@ -12,8 +12,8 @@ from .tools import read_file
 #         return f"Error reading {path}: {e}" 
     
 def build_system_prompt(config: Config) -> str: 
-    agents_md = read_file(config.working_dir / "AGENTS.md")
-    progress_md = read_file(config.working_dir / "PROGRESS.md")
+    agents_md = Path.read_text(config.working_dir / "AGENTS.md")
+    progress_md = Path.read_text(config.working_dir / "PROGRESS.md")
 
     system_prompt = f"""
 You are an advanced agent working inside a structured Harness Engineering pipeline.
