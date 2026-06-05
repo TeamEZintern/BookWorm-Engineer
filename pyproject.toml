@@ -13,4 +13,4 @@ dependencies = [
 ]
 
 [project.scripts]
-bookworm = "bookworm:main"
+bookworm = "bookworm.cli:main"

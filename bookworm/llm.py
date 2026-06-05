@@ -1,0 +1,9 @@
+from openai import OpenAI
+
+from .config import Config
+
+def create_client(config: Config) -> OpenAI:
+    return OpenAI(
+        api_key=config.llm_api_key,
+        baseurl=config.llm_base_url,
+    )
