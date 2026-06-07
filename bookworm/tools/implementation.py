@@ -31,7 +31,6 @@ def create_implementations(config: Config) -> dict[str, Callable[..., str]]:
 
     def write_file(file_path: str, content: str) -> str:
         abs_file_path = _resolve_inside_working_dir(working_dir, file_path)
-        _resolve_inside_working_dir(abs_file_path)
         try:
             abs_file_path.parent.mkdir(parents=True, exist_ok=True)
             abs_file_path.write_text(content, encoding="utf-8")

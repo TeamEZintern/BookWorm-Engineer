@@ -3,7 +3,7 @@ from typing import Callable
 
 from ..config import Config
 from .implementation import create_implementations
-from .schema import schema
+from .schema import SCHEMA
 
 
 @dataclass(frozen=True)
@@ -14,6 +14,7 @@ class ToolRegistry:
 
 def create_tool_registry(config: Config) -> ToolRegistry:
     return ToolRegistry(
-        schema=schema,
+        schema=SCHEMA,
         implementations=create_implementations(config),
     )
+
