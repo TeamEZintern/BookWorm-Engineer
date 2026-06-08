@@ -5,7 +5,7 @@ from .config import Config
 def create_client(config: Config) -> OpenAI:
     return OpenAI(
         api_key=config.llm_api_key,
-        baseurl=config.llm_base_url,
+        base_url=config.llm_base_url,
         default_headers={
             "X-OpenRouter-Title": "BookWorm Engineer"
         },
