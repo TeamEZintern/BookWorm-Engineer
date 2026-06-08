@@ -1410,5 +1410,3 @@ The most important rule for future work is:
 > Add capabilities by passing dependencies through `Config`, `ToolRegistry`, or constructor arguments. Do not add hidden startup behavior during import.
 
 Following this keeps the project easy to test, easy to package, and safe to extend.
-
-```
