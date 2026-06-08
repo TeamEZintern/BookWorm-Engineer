@@ -26,7 +26,7 @@ def build_system_prompt(config: Config, mode: str = "plan") -> str:
         ),
         "research": (
             "You are in Research mode. Answer questions grounded in loaded sources. "
-            "Always cite the source and page number."
+            "Always cite the source (and page number if applicable)."
         ),
     }
 
