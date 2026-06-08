@@ -125,7 +125,7 @@ class Agent:
                                 "role" : "system",
                                 "content" : (
                                     f" WARNING: {context_used: .2%} of context window used."
-                                    "Conflude this processing loop as soon as possible"
+                                    "Conclude this processing loop as soon as possible"
                                 ),
                             }
                         )
