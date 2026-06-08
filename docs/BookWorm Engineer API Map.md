@@ -1,4 +1,3 @@
-````markdown
 # BookWorm Engineer API Map and Expansion Guide
 
 ## Purpose
@@ -1412,5 +1411,4 @@ The most important rule for future work is:
 
 Following this keeps the project easy to test, easy to package, and safe to extend.
 
-```
 ```
