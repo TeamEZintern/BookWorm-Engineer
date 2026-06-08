@@ -42,10 +42,13 @@ class Agent:
         sources_dir = self.config.working_dir / ".bookworm" / "sources"
         if not sources_dir.is_dir():
             return []
-        return sorted(
-            f.name for f in sources_dir.iterdir()
-            if f.suffix.lower() in {".pdf", ".txt", ".md"}
-        )
+        try:
+            return sorted(
+                f.name for f in sources_dir.iterdir()
+                if f.is_file() and f.suffix.lower() in {".pdf", ".txt", ".md"}
+            )
+        except OSError:
+            return []
 
     def _print_status(self) -> None:
         sources = self._get_source_names()
