@@ -29,6 +29,10 @@ class Agent:
         ]
 
     def _set_mode(self, mode: str) -> None:
+        if mode not in VALID_MODES:
+            raise ValueError(
+                f"Invalid mode '{mode}'. Valid modes: {', '.join(sorted(VALID_MODES))}"
+            )
         self._mode = mode
         self.messages[0] = {"role": "system", "content": build_system_prompt(self.config, mode)}
 
