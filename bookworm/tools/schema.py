@@ -72,6 +72,8 @@ ALLOWED_COMMAND_PREFIXES = [
     ".\\venv\\Scripts\\activate"
 ]
 
+SHELL_TIMEOUT = 10
+
 BANNED_COMMAND_PREFIXES = [
     "cd",
     "sudo",

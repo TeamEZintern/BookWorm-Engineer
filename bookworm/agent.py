@@ -20,7 +20,7 @@ class Agent:
         self.config = config
         self.client = client
         self.tool_registry = tool_registry
-        self.messages: list[dict[str,any]] = [
+        self.messages: list[dict[str,Any]] = [
             {"role": "system", "content": system_prompt}
         ]
 
@@ -38,7 +38,7 @@ class Agent:
             if not user_prompt:
                 continue
 
-            self.message.append({"role":"user", "content": user_prompt})
+            self.messages.append({"role":"user", "content": user_prompt})
             start_time = time.time()
 
             try: 
@@ -68,8 +68,8 @@ class Agent:
 
             reply = response.choices[0].message
 
-            if getattr(reply, "re0soning", None):
-                print("Thinking: ", reply.resoning, "\n")
+            if getattr(reply, "reasoning", None):
+                print("Thinking: ", reply.reasoning, "\n")
 
             assistant_message: dict[str,Any] = {
                 "role" : "assistant",
@@ -122,7 +122,7 @@ class Agent:
                     if context_used >= HALLUNCINATION_THRESHOLD:
                         self.messages.append(
                             {
-                                "roles" : "system",
+                                "role" : "system",
                                 "content" : (
                                     f" WARNING: {context_used: .2%} of context window used."
                                     "Conflude this processing loop as soon as possible"

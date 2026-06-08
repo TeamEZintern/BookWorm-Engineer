@@ -1,19 +1,19 @@
 from pathlib import Path
 
 from .config import Config
-from .tools import read_file 
 
-# def _read_file(path: Path) -> str:
-#     try:
-#         return path.read_text(encoding="utf-8")
-#     except FileNotFoundError:
-#         return f"Error: {path} not found."
-#     except Exception as e:
-#         return f"Error reading {path}: {e}" 
+def _read_optional_file(path: Path) -> str:
+    if not path.exists() or not path.is_file():
+      return ""
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return path.read_text(encoding="utf-8", errors="replace")
+ 
     
 def build_system_prompt(config: Config) -> str: 
-    agents_md = Path.read_text(config.working_dir / "AGENTS.md")
-    progress_md = Path.read_text(config.working_dir / "PROGRESS.md")
+    agents_md = _read_optional_file(config.working_dir / "AGENTS.md")
+    progress_md = _read_optional_file(config.working_dir / "PROGRESS.md")
 
     system_prompt = f"""
 You are an advanced agent working inside a structured Harness Engineering pipeline.
