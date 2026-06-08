@@ -5,9 +5,12 @@ from typing import Any
 from openai import OpenAI
 
 from .config import Config
+from .prompts import build_system_prompt
 from .tools import ToolRegistry, call_tool
 
 HALLUNCINATION_THRESHOLD = 0.75
+VALID_MODES = {"plan", "build", "research"}
+
 
 class Agent:
     def __init__(
@@ -20,22 +23,73 @@ class Agent:
         self.config = config
         self.client = client
         self.tool_registry = tool_registry
-        self.messages: list[dict[str,Any]] = [
+        self._mode = "plan"
+        self.messages: list[dict[str, Any]] = [
             {"role": "system", "content": system_prompt}
         ]
 
-    def run(self) -> None: 
-        print("BookWorm Engineer is ready.")
+    def _set_mode(self, mode: str) -> None:
+        self._mode = mode
+        self.messages[0] = {"role": "system", "content": build_system_prompt(self.config, mode)}
+
+    def _print_banner(self) -> None:
+        print("=========== BookWorm Engineer ==========\n")
+        print("Hello I am BookWorm Engineer, your research and coding assistant.")
+        print("How may I help you?")
         print("Type 'exit' or 'quit' to stop.\n")
-        
-        while True: 
-            user_prompt = input("> ").strip()
+
+    def _get_source_names(self) -> list[str]:
+        sources_dir = self.config.working_dir / ".bookworm" / "sources"
+        if not sources_dir.is_dir():
+            return []
+        return sorted(
+            f.name for f in sources_dir.iterdir()
+            if f.suffix.lower() in {".pdf", ".txt", ".md"}
+        )
+
+    def _print_status(self) -> None:
+        sources = self._get_source_names()
+        print(f"Mode: {self._mode.capitalize()}")
+        print(f"CWD: {self.config.working_dir}")
+        print(f"Sources: {', '.join(sources) if sources else '-none-'}")
+
+    def run(self) -> None:
+        self._print_banner()
+
+        while True:
+            self._print_status()
+
+            try:
+                user_prompt = input("> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\nExiting BookWorm Engineer. Goodbye!")
+                return
+
+            print()
+
+            if not user_prompt:
+                continue
 
             if user_prompt.lower() in {"exit", "quit"}:
-                print("Exiting Bookworm Engineer. Goodbye!")
-                return 
-            
-            if not user_prompt:
+                print("Exiting BookWorm Engineer. Goodbye!")
+                return
+
+            if user_prompt.lower().startswith("mode switch "):
+                new_mode = user_prompt[12:].strip().lower()
+                if new_mode in VALID_MODES:
+                    self._set_mode(new_mode)
+                    print(f"Switched to {self._mode.capitalize()} mode.\n")
+                else:
+                    print(f"Unknown mode '{new_mode}'. Available: {', '.join(sorted(VALID_MODES))}\n")
+                continue
+
+            if user_prompt.lower() == "help":
+                print(
+                    "Commands:\n"
+                    "  mode switch <plan|build|research>  — change the agent's mode\n"
+                    "  exit / quit                         — leave BookWorm Engineer\n"
+                    "  help                                — show this message\n"
+                )
                 continue
 
             self.messages.append({"role":"user", "content": user_prompt})
