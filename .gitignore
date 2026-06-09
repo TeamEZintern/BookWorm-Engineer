@@ -1,5 +1,9 @@
 .vscode
 .pytest_cache
+.pytest-tmp/
+tests/.pytest-tmp/
+tests/pytest_tmp/
+tests/_scratch/
 .env
 __pycache__/
 venv/

@@ -16,7 +16,9 @@ VALID_MODES = {"plan", "build", "research"}
 
 def _cmd_init(working_dir: Path) -> CommandResult:
     sources_dir = working_dir / ".bookworm" / "sources"
+    index_dir = working_dir/".bookworm"/"index"
     sources_dir.mkdir(parents=True, exist_ok=True)
+    index_dir.mkdir(parents=True, exist_ok=True)
     print("Initialized .bookworm directory in the project root.\n")
     return CommandResult.HANDLED
 
