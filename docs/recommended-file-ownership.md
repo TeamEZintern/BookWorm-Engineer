@@ -67,6 +67,19 @@ Change this when:
 
 ---
 
+## `bookworm/commands.py`
+
+Owned by command maintainers.
+
+Change this when:
+
+* adding a new special command (e.g. `init`, `exit`, `mode switch`)
+* changing the command dispatch logic in `handle_command`
+* changing how commands return results (`CommandResult` variants)
+* updating the help text or help command
+
+---
+
 ## `bookworm/tools/schema.py`
 
 Owned by tool interface maintainers.

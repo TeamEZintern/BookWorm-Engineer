@@ -227,3 +227,49 @@ class Agent:
 This keeps the agent testable and reusable.
 
 ---
+
+## `handle_command`
+
+Defined in:
+
+```text
+bookworm/commands.py
+```
+
+Main usage:
+
+```python
+result = handle_command(
+    text=user_prompt,
+    working_dir=self.config.working_dir,
+    set_mode=self._set_mode,
+)
+if result == CommandResult.EXIT:
+    return
+if result == CommandResult.HANDLED:
+    continue
+# else NOT_A_COMMAND — pass to LLM
+```
+
+## Purpose
+
+`handle_command` processes special user commands before they reach the LLM.
+
+It handles:
+
+* `init` — creates `.bookworm/sources/` in the project
+* `exit` / `quit` — stops the agent
+* `mode switch <mode>` — changes the agent's active mode
+* `help` — prints available commands
+
+## Return values
+
+Each command returns a `CommandResult` enum value:
+
+| Value | Meaning |
+|---|---|
+| `EXIT` | The agent should terminate |
+| `HANDLED` | The command was processed; continue the loop |
+| `NOT_A_COMMAND` | Not a special command; pass to the LLM |
+
+---

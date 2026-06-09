@@ -42,11 +42,15 @@ prompts.py
   owns system prompt construction
 
 agent.py
-  owns conversation loop and tool-call orchestration
+   owns conversation loop and tool-call orchestration
+
+commands.py
+   owns special commands (init, exit, mode switch, help)
 
 tools/
-  owns safe capabilities exposed to the model
+   owns safe capabilities exposed to the model
 ```
+
 
 The intended dependency direction is:
 
@@ -57,6 +61,7 @@ cli.py
   -> prompts.py
   -> tools/registry.py
   -> agent.py
+  -> commands.py
 ```
 
 `agent.py` should receive dependencies. It should not create global runtime dependencies during import.
@@ -72,6 +77,7 @@ cli.py
 | LLM client           | `bookworm/llm.py`                  | `create_client()`                             | Creates OpenAI-compatible client                   |
 | Prompt               | `bookworm/prompts.py`              | `build_system_prompt()`                       | Builds system prompt from config and project files |
 | Agent runtime        | `bookworm/agent.py`                | `Agent.run()`                                 | Runs conversation loop and tool calls              |
+| Commands             | `bookworm/commands.py`             | `handle_command()` / `CommandResult`          | Special commands: `init`, `exit`, `mode switch`, `help` |
 | Tool registry        | `bookworm/tools/registry.py`       | `create_tool_registry()`                      | Binds schemas to implementations                   |
 | Tool schemas         | `bookworm/tools/schema.py`         | `SCHEMA`                                      | Defines tools visible to the LLM                   |
 | Tool implementations | `bookworm/tools/implementation.py` | `read_file`, `write_file`, `bash`, `ask_user` | Implements local capabilities                      |
@@ -487,6 +493,52 @@ class Agent:
 ```
 
 This keeps the agent testable and reusable.
+
+---
+
+## `handle_command`
+
+Defined in:
+
+```text
+bookworm/commands.py
+```
+
+Main usage:
+
+```python
+result = handle_command(
+    text=user_prompt,
+    working_dir=self.config.working_dir,
+    set_mode=self._set_mode,
+)
+if result == CommandResult.EXIT:
+    return
+if result == CommandResult.HANDLED:
+    continue
+# else NOT_A_COMMAND — pass to LLM
+```
+
+## Purpose
+
+`handle_command` processes special user commands before they reach the LLM.
+
+It handles:
+
+* `init` — creates `.bookworm/sources/` in the project
+* `exit` / `quit` — stops the agent
+* `mode switch <mode>` — changes the agent's active mode
+* `help` — prints available commands
+
+## Return values
+
+Each command returns a `CommandResult` enum value:
+
+| Value | Meaning |
+|---|---|
+| `EXIT` | The agent should terminate |
+| `HANDLED` | The command was processed; continue the loop |
+| `NOT_A_COMMAND` | Not a special command; pass to the LLM |
 
 ---
 
@@ -1116,6 +1168,7 @@ It should not own:
 * config parsing
 * prompt construction
 * client construction
+* command dispatch logic (delegated to `commands.py`)
 * raw tool implementation logic
 
 ---
@@ -1186,6 +1239,19 @@ Change this when:
 * changing context usage tracking
 * changing model response handling
 * changing how assistant output is displayed
+
+---
+
+## `bookworm/commands.py`
+
+Owned by command maintainers.
+
+Change this when:
+
+* adding a new special command (e.g. `init`, `exit`, `mode switch`)
+* changing the command dispatch logic in `handle_command`
+* changing how commands return results (`CommandResult` variants)
+* updating the help text or help command
 
 ---
 

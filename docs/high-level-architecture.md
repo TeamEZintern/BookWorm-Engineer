@@ -16,7 +16,10 @@ prompts.py
   owns system prompt construction
 
 agent.py
-  owns conversation loop and tool-call orchestration
+   owns conversation loop and tool-call orchestration
+
+commands.py
+   owns special commands (init, exit, mode switch, help)
 
 tools/
   owns safe capabilities exposed to the model
@@ -31,6 +34,7 @@ cli.py
   -> prompts.py
   -> tools/registry.py
   -> agent.py
+  -> commands.py
 ```
 
 `agent.py` should receive dependencies. It should not create global runtime dependencies during import.

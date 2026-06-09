@@ -4,12 +4,12 @@ from typing import Any
 
 from openai import OpenAI
 
+from .commands import VALID_MODES, CommandResult, handle_command
 from .config import Config
 from .prompts import build_system_prompt
 from .tools import ToolRegistry, call_tool
 
 HALLUNCINATION_THRESHOLD = 0.75
-VALID_MODES = {"plan", "build", "research"}
 
 
 class Agent:
@@ -77,32 +77,14 @@ class Agent:
             if not user_prompt:
                 continue
 
-            if user_prompt.lower() in {"init"}:
-                self.sources_dir.mkdir(parents=True, exist_ok=True)
-                print("Initialized .bookworm directory in the project root.\n")
-                continue
-
-            if user_prompt.lower() in {"exit", "quit"}:
-                print("Exiting BookWorm Engineer. Goodbye!")
+            result = handle_command(
+                text=user_prompt,
+                working_dir=self.config.working_dir,
+                set_mode=self._set_mode
+            )
+            if result == CommandResult.EXIT:
                 return
-
-            if user_prompt.lower().startswith("mode switch "):
-                new_mode = user_prompt[12:].strip().lower()
-                if new_mode in VALID_MODES:
-                    self._set_mode(new_mode)
-                    print(f"Switched to {self._mode.capitalize()} mode.\n")
-                else:
-                    print(f"Unknown mode '{new_mode}'. Available: {', '.join(sorted(VALID_MODES))}\n")
-                continue
-
-            if user_prompt.lower() == "help":
-                print(
-                    "Commands:\n"
-                    "  init                                — create .bookworm directory in the project\n"
-                    "  mode switch <plan|build|research>  — change the agent's mode\n"
-                    "  exit / quit                         — leave BookWorm Engineer\n"
-                    "  help                                — show this message\n"
-                )
+            if result == CommandResult.HANDLED:
                 continue
 
             self.messages.append({"role":"user", "content": user_prompt})

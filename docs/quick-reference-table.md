@@ -7,6 +7,7 @@
 | LLM client           | `bookworm/llm.py`                  | `create_client()`                             | Creates OpenAI-compatible client                   |
 | Prompt               | `bookworm/prompts.py`              | `build_system_prompt()`                       | Builds system prompt from config and project files |
 | Agent runtime        | `bookworm/agent.py`                | `Agent.run()`                                 | Runs conversation loop and tool calls              |
+| Commands             | `bookworm/commands.py`             | `handle_command()` / `CommandResult`          | Special commands: `init`, `exit`, `mode switch`, `help` |
 | Tool registry        | `bookworm/tools/registry.py`       | `create_tool_registry()`                      | Binds schemas to implementations                   |
 | Tool schemas         | `bookworm/tools/schema.py`         | `SCHEMA`                                      | Defines tools visible to the LLM                   |
 | Tool implementations | `bookworm/tools/implementation.py` | `read_file`, `write_file`, `bash`, `ask_user` | Implements local capabilities                      |
