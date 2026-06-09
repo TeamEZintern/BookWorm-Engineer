@@ -10,6 +10,12 @@ requires-python = ">=3.10"
 dependencies = [
     "openai",
     "python-dotenv",
+    "langchain",
+    "langchain-chroma",
+    "langchain-huggingface",
+    "langchain-text-splitters",
+    "chromadb",
+    "sentence-transformers",
 ]
 
 [project.scripts]
