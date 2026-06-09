@@ -27,6 +27,7 @@ class Agent:
         self.messages: list[dict[str, Any]] = [
             {"role": "system", "content": system_prompt}
         ]
+        self.sources_dir = self.config.working_dir / ".bookworm" / "sources"
 
     def _set_mode(self, mode: str) -> None:
         if mode not in VALID_MODES:
@@ -43,12 +44,11 @@ class Agent:
         print("Type 'exit' or 'quit' to stop.\n")
 
     def _get_source_names(self) -> list[str]:
-        sources_dir = self.config.working_dir / ".bookworm" / "sources"
-        if not sources_dir.is_dir():
+        if not self.sources_dir.is_dir():
             return []
         try:
             return sorted(
-                f.name for f in sources_dir.iterdir()
+                f.name for f in self.sources_dir.iterdir()
                 if f.is_file() and f.suffix.lower() in {".pdf", ".txt", ".md"}
             )
         except OSError:
@@ -77,6 +77,11 @@ class Agent:
             if not user_prompt:
                 continue
 
+            if user_prompt.lower() in {"init"}:
+                self.sources_dir.mkdir(parents=True, exist_ok=True)
+                print("Initialized .bookworm directory in the project root.\n")
+                continue
+
             if user_prompt.lower() in {"exit", "quit"}:
                 print("Exiting BookWorm Engineer. Goodbye!")
                 return
@@ -93,6 +98,7 @@ class Agent:
             if user_prompt.lower() == "help":
                 print(
                     "Commands:\n"
+                    "  init                                — create .bookworm directory in the project\n"
                     "  mode switch <plan|build|research>  — change the agent's mode\n"
                     "  exit / quit                         — leave BookWorm Engineer\n"
                     "  help                                — show this message\n"
