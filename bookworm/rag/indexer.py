@@ -104,5 +104,5 @@ def build_index(config: Config) -> str:
 
     return (
         f"Indexed {len(documents)} documents into {len(chunks)} chunks"
-        f"at {index_dir}"
+        f" at {index_dir}"
     )
