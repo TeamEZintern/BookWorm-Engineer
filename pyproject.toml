@@ -18,5 +18,26 @@ dependencies = [
     "sentence-transformers",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[tool.pytest.ini_options]
+addopts = "-p no:cacheprovider"
+testpaths = [
+    "tests",
+]
+norecursedirs = [
+    ".pytest-tmp",
+    "pytest_tmp",
+    "_scratch",
+    "__pycache__",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["bookworm*"]
+
 [project.scripts]
 bookworm = "bookworm.cli:main"
