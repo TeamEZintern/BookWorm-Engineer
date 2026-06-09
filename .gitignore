@@ -8,3 +8,4 @@ tests/_scratch/
 __pycache__/
 venv/
 *.egg-info/
+reference/
