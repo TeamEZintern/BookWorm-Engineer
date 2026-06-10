@@ -138,7 +138,7 @@ SEARCH_SOURCES_SCHEMA = {
     "function": {
         "name": "search_sources",
         "description": (
-            "Search indexed documents in .bookworm/sources for relevant context. "
+            "Search the RAG index (ChromaDB) built from the configured sources directory for relevant context. "
             "Use this before answering any question about source documents, research papers, "
             "project notes, or uploaded files. Always cite the source labels returned."
         ),
