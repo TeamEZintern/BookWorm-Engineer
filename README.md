@@ -10,7 +10,7 @@ git clone <repo-url>
 cd BookWorm-Engineer
 
 # 2. Install the package (creates the `bookworm` command)
-pip install -e .
+pip install -e . --config-settings editable_mode=compat
 
 # 3. Create a .env file in the repo root (see .env.example or copy from a teammate)
 ```
