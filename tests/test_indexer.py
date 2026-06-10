@@ -12,6 +12,23 @@ class FakeChroma:
         cls.calls.append(kwargs)
         return object()
 
+class FakePdfPage:
+    def __init__(self, text: str | None):
+        self.text = text
+
+    def extract_text(self) -> str | None:
+        return self.text
+
+
+class FakePdfReader:
+    def __init__(self, file_path: str):
+        self.file_path = file_path
+        self.pages = [
+            FakePdfPage("Page one content"),
+            FakePdfPage("   "),
+            FakePdfPage(None),
+            FakePdfPage("Page four content"),
+        ]
 
 def test_load_text_documents_reads_supported_non_empty_files(tmp_path):
     sources_dir = tmp_path / "sources"
@@ -65,7 +82,7 @@ def test_build_index_creates_dirs_and_returns_message_when_no_documents(tmp_path
     result = indexer.build_index(config)
 
     assert "No supported" in result
-    assert "Add .txt or .md files" in result
+    assert "Add .txt, .md, or text-based .pdf files" in result
     assert str(config.rag_sources_dir) in result
     assert config.rag_sources_dir.exists()
     assert config.rag_index_dir.exists()
@@ -130,3 +147,22 @@ def test_build_index_splits_long_documents_into_multiple_chunks(monkeypatch, tmp
 
     assert len(chroma_call["documents"]) > 1
     assert all(chunk.metadata["file_name"] == "long.md" for chunk in chroma_call["documents"])
+
+def test_load_text_documents_reads_pdf_pages(monkeypatch, tmp_path):
+    monkeypatch.setattr(indexer, "PdfReader", FakePdfReader)
+
+    sources_dir = tmp_path / "sources"
+    sources_dir.mkdir()
+    pdf_file = sources_dir / "manual.pdf"
+    pdf_file.write_bytes(b"%PDF fake test bytes")
+
+    documents = indexer._load_text_documents(sources_dir)
+
+    assert len(documents) == 2
+    assert [document.page_content for document in documents] == [
+        "Page one content",
+        "Page four content",
+    ]
+    assert [document.metadata["page"] for document in documents] == [1, 4]
+    assert all(document.metadata["file_name"] == "manual.pdf" for document in documents)
+    assert all(document.metadata["file_type"] == ".pdf" for document in documents)

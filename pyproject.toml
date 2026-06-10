@@ -16,6 +16,7 @@ dependencies = [
     "langchain-text-splitters",
     "chromadb",
     "sentence-transformers",
+    "pypdf",
 ]
 
 [project.optional-dependencies]
