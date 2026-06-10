@@ -1,4 +1,5 @@
 from pathlib import Path
+from pypdf import PdfReader
 
 from langchain_core.documents import Document
 from langchain_chroma import Chroma
@@ -7,7 +8,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from bookworm.config import Config
 from bookworm.rag.embeddings import create_embeddings
 
-SUPPORTED_EXTENSIONS = {".txt", ".md"}
+SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf"}
 
 def _get_sources_dir(config: Config) -> Path: 
     return getattr(config, "rag_sources_dir", Path(".bookworm/sources"))
@@ -24,11 +25,58 @@ def _get_chunk_overlap(config: Config) -> int:
 def _get_collection_name(config: Config) -> str:
     return getattr(config,"rag_collection_name", "bookworm_sources")
 
+def _document_metadata(file_path: Path, **extra_metadata: object) -> dict:
+    return {
+        "source": str(file_path),
+        "file_name": file_path.name,
+        "file_path": str(file_path),
+        "file_type": file_path.suffix.lower(),
+        **extra_metadata,
+    }
+
+def _load_plain_text_document(file_path: Path) -> Document:
+    try: 
+        text = file_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        text = file_path.read_text(encoding="utf-8", errors="ignore")
+    
+    if not text.strip():
+        return None
+    
+    return Document(
+        page_content=text,
+        metadata=_document_metadata(file_path),
+    )
+
+def _load_pdf_documents(file_path: Path) -> list[Document]:
+    documents: list[Document] = []
+    
+    reader = PdfReader(str(file_path))
+
+    for page_index, page in enumerate(reader.pages, start=1):
+        text = page.extract_text() or ""
+
+        if not text.strip():
+            continue
+        
+        documents.append(
+            Document(
+                page_content=text,
+                metadata=_document_metadata(
+                    file_path,
+                    page=page_index,
+                ),
+            )
+        )
+
+    return documents
+
 def _load_text_documents(sources_dir: Path) -> list[Document]:
     """
-    Load .txt and .md files from .bookworm/sources.
+    Load supported source files from .bookworm/sources.
 
-    Each loaded file becomes one LangChain Document before chunking.
+    .txt and .md files become one Document each.
+    .pdf files become one Document per text-bearing page.
     """
 
     documents: list[Document] = []
@@ -37,28 +85,21 @@ def _load_text_documents(sources_dir: Path) -> list[Document]:
         if not file_path.is_file():
             continue
 
-        if file_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+        file_type = file_path.suffix.lower()
+
+        if file_type not in SUPPORTED_EXTENSIONS:
             continue
 
-        try: 
-            text = file_path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            text = file_path.read_text(encoding="utf-8", errors="ignore")
+        if file_type in {".txt",".md"}:
+            document = _load_plain_text_document(file_path)
 
-        if not text.strip():
+            if document is not None: 
+                documents.append(document)
+            
             continue
 
-        documents.append(
-            Document(
-                page_content=text,
-                metadata={
-                    "source": str(file_path),
-                    "file_name": file_path.name,
-                    "file_path": str(file_path),
-                    "file_type": file_path.suffix.lower(),
-                },
-            )
-        )
+        if file_type == ".pdf":
+            documents.extend(_load_pdf_documents(file_path))
     
     return documents
 
@@ -79,8 +120,8 @@ def build_index(config: Config) -> str:
 
     if not documents: 
         return (
-            f"No supported doucments found in {sources_dir}. "
-            "Add .txt or .md files, then run `bookworm index` again. "
+            f"No supported documents found in {sources_dir}. "
+            "Add .txt, .md, or text-based .pdf files, then run `bookworm index` again. "
         )
     
     splitter = RecursiveCharacterTextSplitter(
