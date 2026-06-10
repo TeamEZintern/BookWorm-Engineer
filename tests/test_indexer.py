@@ -102,3 +102,31 @@ def test_build_index_splits_documents_and_writes_chroma_collection(
     assert len(chroma_call["documents"]) >= 1
     assert chroma_call["documents"][0].page_content == "Alpha\n\nBeta"
     assert chroma_call["documents"][0].metadata["file_name"] == "guide.md"
+
+def test_build_index_splits_long_documents_into_multiple_chunks(monkeypatch, tmp_path):
+    FakeChroma.calls.clear()
+
+    sources_dir = tmp_path / "sources"
+    sources_dir.mkdir()
+
+    long_text = "A" * 120 + "\n\n" + "B" * 120
+    (sources_dir / "long.md").write_text(long_text, encoding="utf-8")
+
+    fake_embeddings = object()
+    config = SimpleNamespace(
+        rag_sources_dir=sources_dir,
+        rag_index_dir=tmp_path / "index",
+        rag_chunk_size=100,
+        rag_chunk_overlap=10,
+        rag_collection_name="test_collection",
+    )
+
+    monkeypatch.setattr(indexer, "Chroma", FakeChroma)
+    monkeypatch.setattr(indexer, "create_embeddings", lambda received: fake_embeddings)
+
+    result = indexer.build_index(config)
+
+    chroma_call = FakeChroma.calls[0]
+
+    assert len(chroma_call["documents"]) > 1
+    assert all(chunk.metadata["file_name"] == "long.md" for chunk in chroma_call["documents"])
