@@ -22,6 +22,7 @@ def create_implementations(config: Config) -> dict[str, Callable[..., str]]:
     working_dir = config.working_dir
 
     def read_file(file_path: str) -> str:
+        print(f"  → read_file: {file_path}")
         path = _resolve_inside_working_dir(working_dir, file_path)
         try:
             return path.read_text(encoding="utf-8")
@@ -31,6 +32,7 @@ def create_implementations(config: Config) -> dict[str, Callable[..., str]]:
             return f"Error reading {file_path}: {e}"
 
     def write_file(file_path: str, content: str) -> str:
+        print(f"  → write_file: {file_path}")
         abs_file_path = _resolve_inside_working_dir(working_dir, file_path)
         try:
             abs_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -40,19 +42,7 @@ def create_implementations(config: Config) -> dict[str, Callable[..., str]]:
             return f"Error writing {file_path}: {e}"
 
     def bash(command: str) -> str:
-        """Run a shell command with least-privilege restrictions.
-
-        Restrictions applied:
-        - Only commands whose first token matches ALLOWED_COMMAND_PREFIXES are permitted.
-        - Working directory is locked to WORKING_DIR (set by .env file).
-        - Execution times out after SHELL_TIMEOUT seconds.
-        - Environment is minimal — only essential host vars are inherited.
-
-        References:
-        - https://securecodingpractices.com/prevent-command-injection-python-subprocess/
-        - https://docs.python.org/3/library/subprocess.html
-        - https://arxiv.org/abs/2605.14859
-        """
+        print(f"  → bash: {command}")
         try:
             tokens = shlex.split(command)
         except ValueError as e:
@@ -96,12 +86,14 @@ def create_implementations(config: Config) -> dict[str, Callable[..., str]]:
             return f"Error running command: {e}"
         
     def ask_user(question: str) -> str:
-        print("*** Agent Asks ***:\n" + question, end="\n\n")
-        user_response = input("*** User response ***:\n").strip()
-        print("\n")
+        print(f"  → ask_user: {question}")
+        user_response = input("  > ").strip()
+        print()
         return user_response
     
     def search_sources(query: str) -> str:
+        query_preview = query[:80] + "…" if len(query) > 80 else query
+        print(f"  → search_sources: {query_preview}")
         result = retrieve_context(config, query)
         return result if result else "(no matching sources found in the RAG index)"
     return {

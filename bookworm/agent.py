@@ -38,8 +38,7 @@ class Agent:
         self.messages[0] = {"role": "system", "content": build_system_prompt(self.config, mode)}
 
     def _print_banner(self) -> None:
-        print("=========== BookWorm Engineer ==========\n")
-        print("Hello I am BookWorm Engineer, your research and coding assistant.")
+        print("\nHello I am BookWorm Engineer, your research and coding assistant.")
         print("How may I help you?")
         print("Type 'exit' or 'quit' to stop.\n")
 
@@ -117,9 +116,6 @@ class Agent:
 
             reply = response.choices[0].message
 
-            if getattr(reply, "reasoning", None):
-                print("Thinking: ", reply.reasoning, "\n")
-
             assistant_message: dict[str,Any] = {
                 "role" : "assistant",
                 "content" : reply.content or "",
@@ -147,15 +143,11 @@ class Agent:
                 tool_name = tool_call.function.name
                 tool_arguments = tool_call.function.arguments
 
-                print(f"Calling {tool_name} with arguments {tool_arguments}\n")
-
                 tool_result = call_tool(
                     registry=self.tool_registry,
                     name=tool_name,
                     arguments_json=tool_arguments,
                 )
-
-                print(f"Result: {tool_result}\n")
 
                 self.messages.append(
                     {
