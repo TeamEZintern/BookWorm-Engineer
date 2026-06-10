@@ -102,8 +102,8 @@ def create_implementations(config: Config) -> dict[str, Callable[..., str]]:
         return user_response
     
     def search_sources(query: str) -> str:
-        return retrieve_context(config, query)
-
+        result = retrieve_context(config, query)
+        return result if result else "(no matching sources found in the RAG index)"
     return {
         "read_file": read_file,
         "write_file": write_file,
