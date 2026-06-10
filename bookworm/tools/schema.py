@@ -133,9 +133,32 @@ ASK_USER_SCHEMA = {
     }
 }
 
+SEARCH_SOURCES_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "search_sources",
+        "description": (
+            "Search the RAG index (ChromaDB) built from the configured sources directory for relevant context. "
+            "Use this before answering any question about source documents, research papers, "
+            "project notes, or uploaded files. Always cite the source labels returned."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The search query to find relevant content from indexed sources."
+                }
+            },
+            "required": ["query"]
+        }
+    }
+}
+
 SCHEMA = [
     READ_FILE_SCHEMA,
     WRITE_FILE_SCHEMA,
     BASH_SCHEMA,
     ASK_USER_SCHEMA,
+    SEARCH_SOURCES_SCHEMA,
 ]

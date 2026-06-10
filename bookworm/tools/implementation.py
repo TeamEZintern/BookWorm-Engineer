@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Callable
 
 from ..config import Config
+from ..rag.retriever import retrieve_context
 from .schema import ALLOWED_COMMAND_PREFIXES, SHELL_TIMEOUT
 
 def _resolve_inside_working_dir(working_dir: Path, file_path: str) -> Path:
@@ -100,9 +101,13 @@ def create_implementations(config: Config) -> dict[str, Callable[..., str]]:
         print("\n")
         return user_response
     
+    def search_sources(query: str) -> str:
+        result = retrieve_context(config, query)
+        return result if result else "(no matching sources found in the RAG index)"
     return {
         "read_file": read_file,
         "write_file": write_file,
         "bash": bash,
         "ask_user": ask_user,
+        "search_sources": search_sources,
     }
