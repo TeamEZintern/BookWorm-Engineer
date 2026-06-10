@@ -1,8 +1,8 @@
 import json
 import time
-from typing import Any
 
-from openai import OpenAI
+from langchain_openrouter import ChatOpenRouter
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
 from .commands import VALID_MODES, CommandResult, handle_command
 from .config import Config
@@ -16,16 +16,20 @@ class Agent:
     def __init__(
         self,
         config: Config,
-        client: OpenAI,
+        client: ChatOpenRouter,
         tool_registry: ToolRegistry,
         system_prompt: str,
     ) -> None:
         self.config = config
         self.client = client
         self.tool_registry = tool_registry
+        self.bound_model = client.bind_tools(
+            tools=self.tool_registry.schema,
+            tool_choice="auto",
+        )
         self._mode = "plan"
-        self.messages: list[dict[str, Any]] = [
-            {"role": "system", "content": system_prompt}
+        self.messages: list = [
+            SystemMessage(content=system_prompt)
         ]
         self.sources_dir = self.config.working_dir / ".bookworm" / "sources"
 
@@ -35,7 +39,7 @@ class Agent:
                 f"Invalid mode '{mode}'. Valid modes: {', '.join(sorted(VALID_MODES))}"
             )
         self._mode = mode
-        self.messages[0] = {"role": "system", "content": build_system_prompt(self.config, mode)}
+        self.messages[0] = SystemMessage(content=build_system_prompt(self.config, mode))
 
     def _print_banner(self) -> None:
         print("=========== BookWorm Engineer ==========\n")
@@ -87,7 +91,7 @@ class Agent:
             if result == CommandResult.HANDLED:
                 continue
 
-            self.messages.append({"role":"user", "content": user_prompt})
+            self.messages.append(HumanMessage(content=user_prompt))
             start_time = time.time()
 
             try: 
@@ -103,49 +107,27 @@ class Agent:
 
     def _run_turn(self) -> str:
         while True:
-            response = self.client.chat.completions.create(
-                model=self.config.llm_model,
-                messages=self.messages,
-                tools=self.tool_registry.schema,
-                tool_choice="auto",
-                extra_body={
-                    "reasoning": {
-                        "effort": "low",  # options: "low" | "medium" | "high"
-                    }
-                },
-            )
+            response = self.bound_model.invoke(self.messages)
 
-            reply = response.choices[0].message
+            if hasattr(response, "content_blocks") and response.content_blocks:
+                for block in response.content_blocks:
+                    if isinstance(block, dict) and block.get("type") == "reasoning":
+                        print("Thinking: ", block.get("reasoning", ""), "\n")
 
-            if getattr(reply, "reasoning", None):
-                print("Thinking: ", reply.reasoning, "\n")
+            self.messages.append(response)
 
-            assistant_message: dict[str,Any] = {
-                "role" : "assistant",
-                "content" : reply.content or "",
-            }
+            if not response.tool_calls:
+                content = response.content
+                if isinstance(content, list):
+                    return "".join(
+                        block["text"] if isinstance(block, dict) and block.get("type") == "text" else str(block)
+                        for block in content
+                    ) or ""
+                return content or ""
 
-            if reply.tool_calls:
-                assistant_message["tool_calls"] = [
-                    {
-                        "id" : tool_call.id,
-                        "type" : tool_call.type,
-                        "function" : {
-                            "name" : tool_call.function.name,
-                            "arguments": tool_call.function.arguments,
-                        },
-                    }
-                    for tool_call in reply.tool_calls
-                ]
-            
-            self.messages.append(assistant_message)
-
-            if not reply.tool_calls:
-                return reply.content or ""
-            
-            for tool_call in reply.tool_calls:
-                tool_name = tool_call.function.name
-                tool_arguments = tool_call.function.arguments
+            for tool_call in response.tool_calls:
+                tool_name = tool_call["name"]
+                tool_arguments = json.dumps(tool_call["args"])
 
                 print(f"Calling {tool_name} with arguments {tool_arguments}\n")
 
@@ -158,23 +140,21 @@ class Agent:
                 print(f"Result: {tool_result}\n")
 
                 self.messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id" : tool_call.id,
-                        "content": tool_result,
-                    }
+                    ToolMessage(
+                        content=tool_result,
+                        tool_call_id=tool_call["id"],
+                    )
                 )
 
-                if response.usage is not None: 
-                    context_used = response.usage.prompt_tokens / self.config.context_window
+                if response.usage_metadata:
+                    context_used = response.usage_metadata["input_tokens"] / self.config.context_window
 
                     if context_used >= HALLUNCINATION_THRESHOLD:
                         self.messages.append(
-                            {
-                                "role" : "system",
-                                "content" : (
+                            SystemMessage(
+                                content=(
                                     f" WARNING: {context_used: .2%} of context window used."
                                     "Conclude this processing loop as soon as possible"
                                 ),
-                            }
+                            )
                         )
