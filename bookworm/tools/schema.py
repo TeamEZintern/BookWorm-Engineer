@@ -155,10 +155,41 @@ SEARCH_SOURCES_SCHEMA = {
     }
 }
 
+PAPER_TO_CODE_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "paper_to_code",
+        "description": (
+            "Generate a complete code repository from a research paper PDF. "
+            "Runs a multi-stage pipeline: planning, analysis, then coding. "
+            "Use this when the user wants to implement or reproduce a research paper. "
+            "The generated files are written to output_dir."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "paper_path": {
+                    "type": "string",
+                    "description": "Relative path to the research paper PDF file.",
+                },
+                "output_dir": {
+                    "type": "string",
+                    "description": (
+                        "Relative path to the directory where the generated code will be written. "
+                        "Defaults to {paper_name}_repo if omitted."
+                    ),
+                },
+            },
+            "required": ["paper_path"],
+        },
+    },
+}
+
 SCHEMA = [
     READ_FILE_SCHEMA,
     WRITE_FILE_SCHEMA,
     BASH_SCHEMA,
     ASK_USER_SCHEMA,
     SEARCH_SOURCES_SCHEMA,
+    PAPER_TO_CODE_SCHEMA,
 ]
