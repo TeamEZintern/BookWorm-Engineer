@@ -13,6 +13,11 @@ CODING_SYSTEM = (
     "Write complete, runnable Python files. Return only the file content inside a ```python``` block."
 )
 
+FIX_SYSTEM = (
+    "You are an expert software engineer fixing a bug in generated code. "
+    "Return only the complete corrected file content inside a ```python``` block."
+)
+
 
 def overall_plan_prompt(paper_text: str) -> str:
     return (
@@ -101,4 +106,13 @@ def coding_prompt(
         f"{file_analysis}\n\n"
         f"Implement `{filename}` completely. "
         "Return the full file content inside a ```python``` block."
+    )
+
+
+def fix_prompt(filename: str, code: str, error: str) -> str:
+    return (
+        f"The file `{filename}` has an error.\n\n"
+        f"Current content:\n```python\n{code}\n```\n\n"
+        f"Error:\n{error}\n\n"
+        "Fix the error and return the complete corrected file content."
     )

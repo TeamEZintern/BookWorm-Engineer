@@ -7,6 +7,10 @@ from openai import OpenAI
 from ..config import Config
 from . import artifacts, prompts
 from .pdf import extract_text
+from .validation import check_syntax, install_packages, smoke_test
+
+MAX_FIX_ATTEMPTS = 2
+SMOKE_TEST_TIMEOUT = 30
 
 
 def _llm(client: OpenAI, config: Config, system: str, user: str) -> str:
@@ -174,11 +178,74 @@ def run_pipeline(
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(code, encoding="utf-8")
 
+    # Stage 4: Syntax validation + auto-fix
+    print("Validating syntax...")
+    syntax_errors: dict[str, str] = {}
+    for filename in task_list:
+        output_path = output_dir / filename
+        error = check_syntax(output_path)
+        attempt = 0
+        while error and attempt < MAX_FIX_ATTEMPTS:
+            print(f"  Fixing {filename} (attempt {attempt + 1})...")
+            raw = _llm(
+                client, config,
+                prompts.FIX_SYSTEM,
+                prompts.fix_prompt(filename, prior_files[filename], error),
+            )
+            code = _extract_code(raw)
+            prior_files[filename] = code
+            output_path.write_text(code, encoding="utf-8")
+            artifacts.save(artifacts_dir, f"code/{filename}.txt", code)
+            error = check_syntax(output_path)
+            attempt += 1
+        if error:
+            syntax_errors[filename] = error
+
+    # Stage 5: Install dependencies
     packages = logic.get("packages", [])
     package_list = ", ".join(packages) if packages else "none listed"
+    print(f"Installing packages: {package_list}...")
+    install_result = install_packages(packages, output_dir)
 
-    return (
-        f"Generated {len(task_list)} files in {output_dir}\n"
-        f"Required packages: {package_list}\n"
-        f"Artifacts saved to: {artifacts_dir}"
-    )
+    # Stage 6: Smoke test (only if all files passed syntax validation)
+    runtime_error = None
+    entry_point_name = "main.py" if "main.py" in task_list else task_list[-1]
+    entry_point = output_dir / entry_point_name
+
+    if not syntax_errors:
+        print(f"Running smoke test on {entry_point_name}...")
+        runtime_error = smoke_test(entry_point, output_dir, timeout=SMOKE_TEST_TIMEOUT)
+
+        if runtime_error:
+            print("  Smoke test failed, attempting one fix...")
+            raw = _llm(
+                client, config,
+                prompts.FIX_SYSTEM,
+                prompts.fix_prompt(entry_point_name, prior_files[entry_point_name], runtime_error),
+            )
+            code = _extract_code(raw)
+            prior_files[entry_point_name] = code
+            entry_point.write_text(code, encoding="utf-8")
+            artifacts.save(artifacts_dir, f"code/{entry_point_name}.txt", code)
+            runtime_error = smoke_test(entry_point, output_dir, timeout=SMOKE_TEST_TIMEOUT)
+
+    summary = [
+        f"Generated {len(task_list)} files in {output_dir}",
+        f"Required packages: {package_list}",
+        f"Artifacts saved to: {artifacts_dir}",
+        install_result,
+    ]
+
+    if syntax_errors:
+        summary.append(
+            "Syntax errors remaining in: " + ", ".join(syntax_errors)
+        )
+    else:
+        summary.append("All files passed syntax validation.")
+
+    if runtime_error:
+        summary.append(f"Smoke test failed:\n{runtime_error}")
+    elif not syntax_errors:
+        summary.append(f"Smoke test passed (no crash within {SMOKE_TEST_TIMEOUT}s).")
+
+    return "\n".join(summary)
