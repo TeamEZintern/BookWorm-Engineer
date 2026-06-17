@@ -1,0 +1,144 @@
+{
+  "gui_features": [
+    {
+      "name": "Conversation Threads Panel",
+      "description": "Left panel displaying list of saved conversations with thread names",
+      "progress": "TODO",
+      "subfeatures": [
+        {
+          "name": "Thread Display",
+          "description": "Shows thread name, creation/modified date, context menu",
+          "progress": "TODO"
+        },
+        {
+          "name": "Thread Operations",
+          "description": "Create, rename, delete, and switch between threads",
+          "progress": "TODO"
+        },
+        {
+          "name": "Search",
+          "description": "Real-time thread filtering by name",
+          "progress": "TODO"
+        },
+        {
+          "name": "Date Grouping",
+          "description": "Groups threads by calendar day when sorted by Date created or Date modified",
+          "progress": "TODO"
+        },
+        {
+          "name": "Sorting",
+          "description": "Sort threads by Date created, Date modified, or Name",
+          "progress": "TODO"
+        }
+      ]
+    },
+    {
+      "name": "Main Conversation Panel",
+      "description": "Right panel displaying active conversation with message history",
+      "progress": "TODO",
+      "subfeatures": [
+        {
+          "name": "Message Bubbles",
+          "description": "Chat-style message display with user and agent alignment",
+          "progress": "TODO"
+        },
+        {
+          "name": "Markdown Rendering",
+          "description": "Agent responses rendered as formatted markdown",
+          "progress": "TODO"
+        },
+        {
+          "name": "Tool Execution Blocks",
+          "description": "Collapsible sections for tool execution output",
+          "progress": "TODO"
+        },
+        {
+          "name": "Timestamps",
+          "description": "Optional message timestamps on hover or compact display",
+          "progress": "TODO"
+        },
+        {
+          "name": "Input Area",
+          "description": "Multi-line text input for user messages with send functionality",
+          "progress": "TODO"
+        },
+        {
+          "name": "Agent Status",
+          "description": "Visual indicator showing agent state (Idle, Thinking, Running tool)",
+          "progress": "TODO"
+        }
+      ]
+    },
+    {
+      "name": "Data Management",
+      "description": "Backend data structures and storage for GUI functionality",
+      "progress": "TODO",
+      "subfeatures": [
+        {
+          "name": "Thread Storage",
+          "description": "JSON files stored in .bookworm/threads/ directory",
+          "progress": "TODO"
+        },
+        {
+          "name": "Thread Schema",
+          "description": "Structured JSON schema with id, name, timestamps, and messages",
+          "progress": "TODO"
+        },
+        {
+          "name": "Draft Persistence",
+          "description": "In-memory draft text storage for uns messages",
+          "progress": "TODO"
+        }
+      ]
+    },
+    {
+      "name": "User Interface Features",
+      "description": "Additional UI/UX enhancements",
+      "progress": "TODO",
+      "subfeatures": [
+        {
+          "name": "Context Menus",
+          "description": "Right-click menus for thread operations",
+          "progress": "TODO"
+        },
+        {
+          "name": "Inline Editing",
+          "description": "Double-click thread names for immediate renaming",
+          "progress": "TODO"
+        },
+        {
+          "name": "Visual Feedback",
+          "description": "Active thread highlighting and visual indicators",
+          "progress": "TODO"
+        },
+        {
+          "name": "Confirmation Dialogs",
+          "description": "User confirmation for destructive actions like deletion",
+          "progress": "TODO"
+        }
+      ]
+    },
+    {
+      "name": "Integration Features",
+      "description": "Integration with Bookworm agent backend",
+      "progress": "TODO",
+      "subfeatures": [
+        {
+          "name": "Backend Communication",
+          "description": "Real-time communication with Bookworm agent",
+          "progress": "TODO"
+        },
+        {
+          "name": "Thread Synchronization",
+          "description": "Sync thread state with agent backend",
+          "progress": "TODO"
+        },
+        {
+          "name": "Message Persistence",
+          "description": "Persistent storage of conversation history",
+          "progress": "TODO"
+        }
+      ]
+    }
+  ]
+}
