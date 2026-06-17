@@ -25,7 +25,7 @@
 ## Modes
 
 - **plan** — analyse, ask clarifying Qs, design before coding
-- **build** — implement, then append to PROGRESS.md, then git commit
+- **build** — implement code and run commands
 - **research** — answer grounded in indexed sources, always cite source labels
 
 ## Architecture
@@ -60,12 +60,9 @@
 - Bash subprocess receives a **minimal env**: only `PATH`, `SYSTEMROOT`, `TEMP`, `TMP`, and vars starting with `CONDA_`, `PYTHON`, or `VIRTUAL_ENV`
 - `reasoning_effort` is hardcoded to `"low"` in `agent.py:112` — not configurable
 
-## Git workflow (enforced by build mode prompt)
+## Git workflow
 
-1. Append to PROGRESS.md
-2. **Stage PROGRESS.md first** (`git add PROGRESS.md`)
-3. Commit all changes
-4. No remote push (local commits only)
+Commit all changes. No remote push (local commits only).
 
 ## Testing
 
@@ -77,17 +74,9 @@ pytest -p no:cacheprovider      # explicit cache disable (already default in pyp
 
 Tests live in `tests/`. No fixtures, no integration test prerequisites, no snapshot workflows.
 
-## Project memory
-
-- `PROGRESS.md`: append a dated bullet when a task/feature is completed. Never delete prior entries.
-- `DECISIONS.md`: append an entry only for non-trivial technical/architectural choices (include the "why", not just the "what"). Never delete or rewrite prior entries.
-
 ## Files auto-loaded into system prompt
 
-- `AGENTS.md` — these instructions, read from the **project working dir**
-- `PROGRESS.md` — runtime continuity state, read from the **project working dir**
-
-Both are optional (missing files produce empty string). Update PROGRESS.md as features progress.
+`AGENTS.md` is read from the **project working dir** and injected into the system prompt. Optional — missing file produces empty string.
 
 ## Context window
 
