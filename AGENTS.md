@@ -77,6 +77,11 @@ pytest -p no:cacheprovider      # explicit cache disable (already default in pyp
 
 Tests live in `tests/`. No fixtures, no integration test prerequisites, no snapshot workflows.
 
+## Project memory
+
+- `PROGRESS.md`: append a dated bullet when a task/feature is completed. Never delete prior entries.
+- `DECISIONS.md`: append an entry only for non-trivial technical/architectural choices (include the "why", not just the "what"). Never delete or rewrite prior entries.
+
 ## Files auto-loaded into system prompt
 
 - `AGENTS.md` — these instructions, read from the **project working dir**
