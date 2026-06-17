@@ -12,21 +12,21 @@
 |  + New Thread [Sort ▼]  |  ┌───────────────────────────────────────────────────────┐  |
 |                         |  │                      User message                     |  │
 | ----------------------- |  │                                                       |  │
-|  Design GUI             |  └───────────────────────────────────────────────────────┘  |
-|  17 Jun 2026            |  ┌───────────────────────────────────────────────────────┐  |
+|  17 Jun 2026            |  └───────────────────────────────────────────────────────┘  |
+|  Design GUI             |  ┌───────────────────────────────────────────────────────┐  |
 |                         |  │                     Agent response                    |  │
-|  Fix RAG bug            |  │                     with formatted                    |  │
-|  16 Jun 2026            |  │                     markdown output                   |  |
-|                         |  └───────────────────────────────────────────────────────┘  |
-|  Add tests              |                                                             |
-|  15 Jun 2026            |  ┌───────────────────────────────────────────────────────┐  |
-|                         |  │                     Tool execution                    │  |
-|  ...                    |  │                     [output here]                     │  |
-|                         |  └───────────────────────────────────────────────────────┘  |
+|  16 Jun 2026            |  │                     with formatted                    |  │
+|  Fix RAG bug            |  │                     markdown output                   |  |
+|  Add tests              |  └───────────────────────────────────────────────────────┘  |
 |                         |                                                             |
+|  15 Jun 2026            |  ┌───────────────────────────────────────────────────────┐  |
+|  Why don't button work  |  │                     Tool execution                    │  |
+|  How do I fix colors    |  │                     [output here]                     │  |
+|  feet smell             |  └───────────────────────────────────────────────────────┘  |
+|  ...                    |                                                             |
 |                         |  ┌───────────────────────────────────────────────────────┐  |
-|                         |  │                     Type a message                    │  |
-|                         |  └───────────────────────────────────────────────────────┘  |
+|  Older                  |  │                     Type a message                    │  |
+|  ...                    |  └───────────────────────────────────────────────────────┘  |
 +---------------------------------------------------------------------------------------+
 ```
 
@@ -39,6 +39,15 @@ Lists all saved conversations. Each thread shows:
 - **Thread name** (editable via rename)
 - **Date created** or **date last modified** (depending on sort)
 - **Context menu** (right-click): Rename, Delete
+
+#### Thread grouping and display
+
+Threads are grouped by calendar day (day-month format) when sorted by **Date created** or **Date modified**:
+
+- **Date created**: threads grouped by creation day (earliest first)
+- **Date modified**: threads grouped by modification day (earliest first)
+
+When sorted by **Name**, threads are displayed alphabetically without date grouping.
 
 #### Thread operations
 
@@ -55,8 +64,8 @@ A sort dropdown at the top of the left panel offers three options:
 
 | Sort mode | Behaviour |
 |---|---|
-| **Date created** | Newest first |
-| **Date modified** | Most recently active first (default) |
+| **Date created** | Threads grouped by creation day (earliest first), sorted chronologically |
+| **Date modified** | Threads grouped by modification day (earliest first), sorted chronologically |
 | **Name** | Alphabetical A→Z |
 
 The current sort mode is persisted per session.
