@@ -4,117 +4,139 @@
       "name": "Conversation Threads Panel",
       "description": "Left panel displaying list of saved conversations with thread names",
       "progress": "TODO",
+      "status": ["Thread display implemented", "Basic operations working"],
       "subfeatures": [
         {
           "name": "Thread Display",
           "description": "Shows thread name, creation/modified date, context menu",
-          "progress": "TODO"
+          "progress": "DOING",
+          "status": ["UI components created", "Date grouping implemented"]
         },
         {
           "name": "Thread Operations",
           "description": "Create, rename, delete, and switch between threads",
-          "progress": "TODO"
+          "progress": "DOING",
+          "status": ["Create/delete functionality implemented", "Rename in progress"]
         },
         {
           "name": "Search",
           "description": "Real-time thread filtering by name",
-          "progress": "TODO"
+          "progress": "TODO",
+          "status": ["Search input added", "Filtering logic planned"]
         },
         {
           "name": "Date Grouping",
           "description": "Groups threads by calendar day when sorted by Date created or Date modified",
-          "progress": "TODO"
+          "progress": "DONE",
+          "status": ["Grouping by day/week/month implemented", "Visual headers added"]
         },
         {
           "name": "Sorting",
           "description": "Sort threads by Date created, Date modified, or Name",
-          "progress": "TODO"
+          "progress": "DONE",
+          "status": ["Sort dropdown implemented", "Sort functionality working"]
         }
       ]
     },
     {
       "name": "Main Conversation Panel",
       "description": "Right panel displaying active conversation with message history",
-      "progress": "TODO",
+      "progress": "DOING",
+      "status": ["Basic chat UI created", "Message bubbles implemented"],
       "subfeatures": [
         {
           "name": "Message Bubbles",
           "description": "Chat-style message display with user and agent alignment",
-          "progress": "TODO"
+          "progress": "DONE",
+          "status": ["Message bubble UI created", "Styling applied"]
         },
         {
           "name": "Markdown Rendering",
           "description": "Agent responses rendered as formatted markdown",
-          "progress": "TODO"
+          "progress": "DOING",
+          "status": ["Basic markdown parsing implemented", "Advanced formatting planned"]
         },
         {
           "name": "Tool Execution Blocks",
           "description": "Collapsible sections for tool execution output",
-          "progress": "TODO"
+          "progress": "TODO",
+          "status": ["UI structure prepared", "Integration pending"]
         },
         {
           "name": "Timestamps",
           "description": "Optional message timestamps on hover or compact display",
-          "progress": "TODO"
+          "progress": "DONE",
+          "status": ["Timestamp display implemented", "Hover tooltips added"]
         },
         {
           "name": "Input Area",
           "description": "Multi-line text input for user messages with send functionality",
-          "progress": "TODO"
+          "progress": "DOING",
+          "status": ["Input field created", "Send button functional"]
         },
         {
           "name": "Agent Status",
           "description": "Visual indicator showing agent state (Idle, Thinking, Running tool)",
-          "progress": "TODO"
+          "progress": "DONE",
+          "status": ["Status bar implemented", "State indicators working"]
         }
       ]
     },
     {
       "name": "Data Management",
       "description": "Backend data structures and storage for GUI functionality",
-      "progress": "TODO",
+      "progress": "DOING",
+      "status": ["Thread model created", "Storage abstraction implemented"],
       "subfeatures": [
         {
           "name": "Thread Storage",
           "description": "JSON files stored in .bookworm/threads/ directory",
-          "progress": "TODO"
+          "progress": "DOING",
+          "status": ["File path structure defined", "Persistence layer planned"]
         },
         {
           "name": "Thread Schema",
           "description": "Structured JSON schema with id, name, timestamps, and messages",
-          "progress": "TODO"
+          "progress": "DONE",
+          "status": ["Data model defined", "Schema validation implemented"]
         },
         {
           "name": "Draft Persistence",
-          "description": "In-memory draft text storage for uns messages",
-          "progress": "TODO"
+          "description": "In-memory draft text storage for unsaved messages",
+          "progress": "TODO",
+          "status": ["Architecture planned", "Implementation pending"]
         }
       ]
     },
     {
       "name": "User Interface Features",
       "description": "Additional UI/UX enhancements",
-      "progress": "TODO",
+      "progress": "DOING",
+      "status": ["Context menus implemented", "Visual feedback added"],
       "subfeatures": [
         {
           "name": "Context Menus",
           "description": "Right-click menus for thread operations",
-          "progress": "TODO"
+          "progress": "DONE",
+          "status": ["Right-click menus created", "Actions connected"]
         },
         {
           "name": "Inline Editing",
           "description": "Double-click thread names for immediate renaming",
-          "progress": "TODO"
+          "progress": "DOING",
+          "status": ["Edit mode initiated", "Validation in progress"]
         },
         {
           "name": "Visual Feedback",
           "description": "Active thread highlighting and visual indicators",
-          "progress": "TODO"
+          "progress": "DONE",
+          "status": ["Highlighting implemented", "Selection feedback working"]
         },
         {
           "name": "Confirmation Dialogs",
           "description": "User confirmation for destructive actions like deletion",
-          "progress": "TODO"
+          "progress": "DONE",
+          "status": ["Delete confirmation implemented", "Error dialogs added"]
         }
       ]
     },
@@ -122,21 +144,25 @@
       "name": "Integration Features",
       "description": "Integration with Bookworm agent backend",
       "progress": "TODO",
+      "status": ["Architecture defined", "Backend connection planned"],
       "subfeatures": [
         {
           "name": "Backend Communication",
           "description": "Real-time communication with Bookworm agent",
-          "progress": "TODO"
+          "progress": "TODO",
+          "status": ["Connection interface designed", "Message passing planned"]
         },
         {
           "name": "Thread Synchronization",
           "description": "Sync thread state with agent backend",
-          "progress": "TODO"
+          "progress": "TODO",
+          "status": ["Sync logic defined", "Implementation pending"]
         },
         {
           "name": "Message Persistence",
           "description": "Persistent storage of conversation history",
-          "progress": "TODO"
+          "progress": "TODO",
+          "status": ["Persistence layer designed", "Auto-save planned"]
         }
       ]
     }
