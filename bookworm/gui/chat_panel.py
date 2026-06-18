@@ -15,6 +15,7 @@ from PySide6.QtCore import Qt, QTimer, QPropertyAnimation
 from PySide6.QtGui import QTextCursor, QTextDocument, QFont, QTextOption
 
 from .config import GUIConfig
+from .themes import get_colors
 class Message:
     """Represents a message in the chat."""
     
@@ -58,9 +59,10 @@ class ChatPanel(QWidget):
     def __init__(self, config: GUIConfig, parent=None):
         super().__init__(parent)
         self.config = config
+        self.colors = get_colors(config.theme)
         self.messages: List[Message] = []
         self.is_processing = False
-        
+
         self.setup_ui()
     
     def setup_ui(self):
@@ -70,8 +72,9 @@ class ChatPanel(QWidget):
         layout.setSpacing(0)
         
         # Status bar
+        c = self.colors
         self.status_bar = QLabel("Ready")
-        self.status_bar.setStyleSheet("background-color: #f0f0f0; padding: 5px; border-bottom: 1px solid #ddd;")
+        self.status_bar.setStyleSheet(f"background-color: {c['bg_tertiary']}; color: {c['text_secondary']}; padding: 5px; border-bottom: 1px solid {c['border']};")
         self.status_bar.setAlignment(Qt.AlignLeft)
         layout.addWidget(self.status_bar)
         
@@ -93,7 +96,7 @@ class ChatPanel(QWidget):
         # Input area
         self.input_frame = QFrame()
         self.input_frame.setFrameStyle(QFrame.StyledPanel | QFrame.Plain)
-        self.input_frame.setStyleSheet("background-color: #f5f5f5; border-top: 1px solid #ddd;")
+        self.input_frame.setStyleSheet(f"background-color: {c['bg_secondary']}; color: {c['text_primary']}; border-top: 1px solid {c['border']};")
         
         input_layout = QHBoxLayout(self.input_frame)
         input_layout.setContentsMargins(10, 10, 10, 10)
@@ -102,27 +105,27 @@ class ChatPanel(QWidget):
         self.message_input.setPlaceholderText("Type a message...")
         self.message_input.setMaximumHeight(100)
         self.message_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.message_input.setStyleSheet("border-radius: 5px; padding: 5px;")
+        self.message_input.setStyleSheet(f"background-color: {c['bg_secondary']}; color: {c['text_primary']}; border: 1px solid {c['border']}; border-radius: 5px; padding: 5px;")
         self.message_input.textChanged.connect(self.on_input_changed)
         
         self.send_button = QPushButton("Send")
         self.send_button.clicked.connect(self.on_send_clicked)
-        self.send_button.setStyleSheet("""
-            QPushButton {
-                background-color: #007bff;
-                color: white;
+        self.send_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {c['accent']};
+                color: {c['accent_text']};
                 border: none;
                 border-radius: 5px;
                 padding: 8px 16px;
                 font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #0056b3;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
-                color: #666666;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {c['accent_hover']};
+            }}
+            QPushButton:disabled {{
+                background-color: {c['bg_tertiary']};
+                color: {c['text_secondary']};
+            }}
         """)
         
         input_layout.addWidget(self.message_input, 1)
@@ -152,11 +155,11 @@ class ChatPanel(QWidget):
         header_layout.setSpacing(10)
         
         role_label = QLabel(message.role.capitalize())
-        role_label.setStyleSheet("font-weight: bold; font-size: 12px;")
+        role_label.setStyleSheet(f"font-weight: bold; font-size: 12px; color: {self.colors['text_primary']};")
         header_layout.addWidget(role_label)
         
         timestamp_label = QLabel(message.timestamp.strftime("%H:%M"))
-        timestamp_label.setStyleSheet("color: #666; font-size: 11px;")
+        timestamp_label.setStyleSheet(f"color: {self.colors['text_secondary']}; font-size: 11px;")
         header_layout.addWidget(timestamp_label, 1)
         
         bubble_layout.addLayout(header_layout)
@@ -164,23 +167,24 @@ class ChatPanel(QWidget):
         # Message content
         if message.role == "assistant":
             # Render markdown
-            content_widget = self.create_markdown_widget(message.content)
+            content_widget = self.create_markdown_widget(message.content, self.colors)
             bubble_layout.addWidget(content_widget)
         else:
             # Plain text for user messages
             content_label = QLabel(message.content)
             content_label.setWordWrap(True)
-            content_label.setStyleSheet("background-color: transparent; border: none;")
+            content_label.setStyleSheet(f"background-color: transparent; border: none; color: {self.colors['text_primary']};")
             bubble_layout.addWidget(content_label)
         
         # Add to message layout
         self.message_layout.insertWidget(self.message_layout.count() - 1, bubble_frame)
     
-    def create_markdown_widget(self, content: str) -> QWidget:
+    def create_markdown_widget(self, content: str, colors: dict) -> QWidget:
         """Create a widget for displaying markdown content."""
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
+        cp = colors
         
         # Simple markdown rendering
         # In a real implementation, you would use a proper markdown renderer
@@ -188,25 +192,26 @@ class ChatPanel(QWidget):
         for line in lines:
             if line.startswith('# '):
                 label = QLabel(f"<h1>{line[2:]}</h1>")
-                label.setStyleSheet("font-size: 18px; font-weight: bold; margin: 5px 0;")
+                label.setStyleSheet(f"font-size: 18px; font-weight: bold; margin: 5px 0; color: {cp['text_primary']};")
                 label.setWordWrap(True)
                 layout.addWidget(label)
             elif line.startswith('## '):
                 label = QLabel(f"<h2>{line[3:]}</h2>")
-                label.setStyleSheet("font-size: 16px; font-weight: bold; margin: 5px 0;")
+                label.setStyleSheet(f"font-size: 16px; font-weight: bold; margin: 5px 0; color: {cp['text_primary']};")
                 label.setWordWrap(True)
                 layout.addWidget(label)
             elif line.startswith('- '):
                 label = QLabel(f"• {line[2:]}")
-                label.setStyleSheet("margin-left: 15px; margin-bottom: 2px;")
+                label.setStyleSheet(f"margin-left: 15px; margin-bottom: 2px; color: {cp['text_primary']};")
                 label.setWordWrap(True)
                 layout.addWidget(label)
             elif line.startswith('```'):
                 # Code block
                 code_label = QLabel(f"<pre><code>{line[3:]}</code></pre>")
-                code_label.setStyleSheet("""
-                    background-color: #f4f4f4;
-                    border: 1px solid #ddd;
+                code_label.setStyleSheet(f"""
+                    background-color: {cp['code_bg']};
+                    color: {cp['code_text']};
+                    border: 1px solid {cp['border']};
                     border-radius: 4px;
                     padding: 8px;
                     font-family: monospace;
@@ -219,6 +224,7 @@ class ChatPanel(QWidget):
                 # Regular text
                 if line.strip():
                     label = QLabel(line)
+                    label.setStyleSheet(f"color: {cp['text_primary']};")
                     label.setWordWrap(True)
                     layout.addWidget(label)
         
@@ -226,17 +232,20 @@ class ChatPanel(QWidget):
     
     def get_message_style(self, role: str) -> str:
         """Get CSS style for message bubble based on role."""
+        c = self.colors
         if role == "user":
-            return """
-                background-color: #e3f2fd;
-                border: 1px solid #2196f3;
+            return f"""
+                background-color: {c['bubble_user_bg']};
+                color: {c['bubble_user_text']};
+                border: 1px solid {c['bubble_user_border']};
                 border-radius: 10px;
                 margin-left: 20%;
             """
         else:
-            return """
-                background-color: #f5f5f5;
-                border: 1px solid #ddd;
+            return f"""
+                background-color: {c['bubble_assist_bg']};
+                color: {c['bubble_assist_text']};
+                border: 1px solid {c['bubble_assist_border']};
                 border-radius: 10px;
                 margin-right: 20%;
             """

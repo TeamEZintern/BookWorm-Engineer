@@ -15,8 +15,8 @@ Bookworm launches GUI interface by default
 
 ### Mode Switching `TODO`
 Ability to switch between GUI and terminal modes
-- [ ] No way to switch in between GUI and terminal in the middle of a session
-- [ ] Can only choose at the start of a session
+- [x] Choose at the start of a session
+- [ ] Switch in between GUI and terminal in the middle of a session
 
 ---
 

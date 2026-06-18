@@ -5,18 +5,18 @@ This module implements the main application window that integrates the thread pa
 and chat panel components.
 """
 
-from typing import List, Dict, Any
+from typing import List
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QHBoxLayout, 
-    QVBoxLayout, QSplitter, QLabel, QMessageBox
+    QApplication, QMainWindow, QWidget, QHBoxLayout,
+    QSplitter
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon
 
 from .thread_panel import ThreadPanel, Thread
 from .chat_panel import ChatPanel, Message
 from .config import GUIConfig
 from ..config import Config
+from .themes import build_stylesheet
 
 class BookwormGUI(QMainWindow):
     """
@@ -31,7 +31,11 @@ class BookwormGUI(QMainWindow):
         self.config = config
         self.gui_config = gui_config
         self.threads: List[Thread] = []
-        
+
+        app = QApplication.instance()
+        if app:
+            app.setStyleSheet(build_stylesheet(gui_config.theme))
+
         self.setup_ui()
         self.load_initial_data()
     

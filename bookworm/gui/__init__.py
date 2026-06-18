@@ -10,13 +10,19 @@ __version__ = "0.1.0"
 __author__ = "BookWorm Engineer"
 
 from .main_window import BookwormGUI
-from .thread_panel import ThreadPanel
-from .chat_panel import ChatPanel
+from .thread_panel import ThreadPanel, Thread
+from .chat_panel import ChatPanel, Message
 from .config import GUIConfig
+from .themes import get_colors, build_stylesheet, COLOR_SCHEMES
 
 __all__ = [
     "BookwormGUI",
-    "ThreadPanel", 
+    "ThreadPanel",
+    "Thread",
     "ChatPanel",
-    "GUIConfig"
+    "Message",
+    "GUIConfig",
+    "get_colors",
+    "build_stylesheet",
+    "COLOR_SCHEMES",
 ]
