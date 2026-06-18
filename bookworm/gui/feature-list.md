@@ -35,10 +35,11 @@ Shows thread name, creation/modified date, context menu
 
 ### Thread Operations `DOING`
 Create, rename, delete, and switch between threads
+- [x] Click on thread in thread panel to open its coversation in the chat panel
+- [x] If a thread's converstaion is already opened in the chat panel, clicking on it in the thread panel does nothing
+- [x] Clicking a different thread saves the current conversation and loads the selected one, replacing the chat panel content entirely.
 - [x] Create/delete functionality implemented
-- [ ] Rename in progress
-
-**Thread switching behaviour:** Clicking the currently active thread does nothing — the view stays unchanged. Clicking a different thread saves the current conversation and loads the selected one, replacing the chat panel content entirely.
+- [x] Right clicking a thread shows a context menu to rename or delete it
 
 ### Search `TODO`
 Real-time thread filtering by name
