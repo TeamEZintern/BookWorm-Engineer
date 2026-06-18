@@ -250,6 +250,44 @@ class ChatPanel(QWidget):
                 margin-right: 20%;
             """
     
+    def apply_theme(self, theme_name: str):
+        self.colors = get_colors(theme_name)
+        c = self.colors
+
+        self.status_bar.setStyleSheet(f"background-color: {c['bg_tertiary']}; color: {c['text_secondary']}; padding: 5px; border-bottom: 1px solid {c['border']};")
+        self.input_frame.setStyleSheet(f"background-color: {c['bg_secondary']}; color: {c['text_primary']}; border-top: 1px solid {c['border']};")
+        self.message_input.setStyleSheet(f"background-color: {c['bg_secondary']}; color: {c['text_primary']}; border: 1px solid {c['border']}; border-radius: 5px; padding: 5px;")
+        self.send_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {c['accent']};
+                color: {c['accent_text']};
+                border: none;
+                border-radius: 5px;
+                padding: 8px 16px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {c['accent_hover']};
+            }}
+            QPushButton:disabled {{
+                background-color: {c['bg_tertiary']};
+                color: {c['text_secondary']};
+            }}
+        """)
+
+        saved = self.messages[:]
+        self.messages = []
+        while self.message_layout.count() > 0:
+            item = self.message_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self.message_layout.addStretch()
+        self.scroll_area.update()
+
+        for msg in saved:
+            self.messages.append(msg)
+            self.display_message(msg)
+
     def scroll_to_bottom(self):
         """Scroll the chat to the bottom."""
         scrollbar = self.scroll_area.verticalScrollBar()

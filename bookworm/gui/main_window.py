@@ -8,7 +8,7 @@ and chat panel components.
 from typing import List
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout,
-    QSplitter
+    QVBoxLayout, QSplitter, QPushButton, QLabel
 )
 from PySide6.QtCore import Qt
 
@@ -16,7 +16,7 @@ from .thread_panel import ThreadPanel, Thread
 from .chat_panel import ChatPanel, Message
 from .config import GUIConfig
 from ..config import Config
-from .themes import build_stylesheet
+from .themes import build_stylesheet, get_colors
 
 class BookwormGUI(QMainWindow):
     """
@@ -38,38 +38,62 @@ class BookwormGUI(QMainWindow):
 
         self.setup_ui()
         self.load_initial_data()
-    
+
+    def _theme_icon(self) -> str:
+        return "🌞" if self.gui_config.theme == "light" else "🌚"
+
     def setup_ui(self):
         """Set up the user interface."""
         self.setWindowTitle(self.gui_config.window_title)
         self.setMinimumSize(self.gui_config.window_width, self.gui_config.window_height)
-        
-        # Create central widget
+
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        
-        # Create main layout
-        main_layout = QHBoxLayout(central_widget)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
-        
-        # Create thread panel
+
+        root_layout = QVBoxLayout(central_widget)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+
+        # Header bar
+        header_colors = get_colors(self.gui_config.theme)
+        header_bar = QWidget()
+        header_bar.setStyleSheet(f"background-color: {header_colors['bg_tertiary']}; color: {header_colors['text_primary']};")
+        header_layout = QHBoxLayout(header_bar)
+        header_layout.setContentsMargins(12, 4, 8, 4)
+
+        title_label = QLabel("BookWorm Engineer")
+        title_label.setStyleSheet("font-weight: bold; font-size: 14px; background: transparent;")
+        header_layout.addWidget(title_label)
+        header_layout.addStretch()
+
+        self.theme_btn = QPushButton(self._theme_icon())
+        self.theme_btn.setFixedSize(44, 28)
+        self.theme_btn.setToolTip(f"Switch to {'dark' if self.gui_config.theme == 'light' else 'light'} mode")
+        self.theme_btn.clicked.connect(self.on_theme_toggle)
+        self.theme_btn.setStyleSheet("border: 1px solid " + header_colors['border'] + "; border-radius: 4px; background: transparent; font-size: 16px; padding: 0px;")
+        header_layout.addWidget(self.theme_btn)
+
+        root_layout.addWidget(header_bar)
+
+        # Body with splitter
+        body_layout = QHBoxLayout()
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(0)
+
         self.thread_panel = ThreadPanel(self.gui_config)
         self.thread_panel.on_thread_selected.connect(self.on_thread_selected)
-        
-        # Create chat panel
+
         self.chat_panel = ChatPanel(self.gui_config)
-        
-        # Create splitter for resizable panels
+
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self.thread_panel)
         splitter.addWidget(self.chat_panel)
-        splitter.setSizes([self.gui_config.thread_panel_width, 
+        splitter.setSizes([self.gui_config.thread_panel_width,
                           self.width() - self.gui_config.thread_panel_width])
-        
-        main_layout.addWidget(splitter)
-        
-        # Set up status bar
+
+        body_layout.addWidget(splitter)
+        root_layout.addLayout(body_layout, 1)
+
         self.status_bar = self.statusBar()
         self.status_bar.showMessage("Ready")
     
@@ -129,6 +153,22 @@ class BookwormGUI(QMainWindow):
             message = Message.from_dict(message_data)
             self.chat_panel.add_message(message)
     
+    def on_theme_toggle(self):
+        self.gui_config.theme = "dark" if self.gui_config.theme == "light" else "light"
+        colors = get_colors(self.gui_config.theme)
+
+        app = QApplication.instance()
+        if app:
+            app.setStyleSheet(build_stylesheet(self.gui_config.theme))
+
+        self.chat_panel.apply_theme(self.gui_config.theme)
+
+        self.theme_btn.setText(self._theme_icon())
+        self.theme_btn.setToolTip(f"Switch to {'dark' if self.gui_config.theme == 'light' else 'light'} mode")
+        header_bar = self.centralWidget().layout().itemAt(0).widget()
+        header_bar.setStyleSheet(f"background-color: {colors['bg_tertiary']}; color: {colors['text_primary']};")
+        self.theme_btn.setStyleSheet("border: 1px solid " + colors['border'] + "; border-radius: 4px; background: transparent; font-size: 16px; padding: 0px;")
+
     def closeEvent(self, event):
         """Handle window close event."""
         # TODO: Save thread state before closing

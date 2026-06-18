@@ -119,6 +119,11 @@ Additional UI/UX enhancements
 
 - [x] Context menus implemented
 - [x] Visual feedback added
+- [x] Theme toggle button (header bar)
+- [x] Light and dark colour palettes (`themes.py`)
+- [x] Global QSS stylesheet cascades to all standard widgets
+- [x] Theme-aware inline styles for message bubbles, inputs, buttons
+- [x] Live theme switching without restart
 
 ### Context Menus `DONE`
 Right-click menus for thread operations
