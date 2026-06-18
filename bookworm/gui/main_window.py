@@ -17,6 +17,7 @@ from .thread_panel import ThreadPanel, Thread
 from .chat_panel import ChatPanel
 from .config import GUIConfig
 from ..config import Config
+
 class BookwormGUI(QMainWindow):
     """
     Main GUI window for Bookworm.

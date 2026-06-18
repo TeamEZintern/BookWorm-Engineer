@@ -17,6 +17,7 @@ dependencies = [
     "chromadb",
     "sentence-transformers",
     "pypdf",
+    "pyside6",
 ]
 
 [project.optional-dependencies]
