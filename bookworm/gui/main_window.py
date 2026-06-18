@@ -5,7 +5,7 @@ This module implements the main application window that integrates the thread pa
 and chat panel components.
 """
 
-from typing import List
+from typing import List, Optional
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout,
     QVBoxLayout, QSplitter, QPushButton, QLabel
@@ -31,6 +31,7 @@ class BookwormGUI(QMainWindow):
         self.config = config
         self.gui_config = gui_config
         self.threads: List[Thread] = []
+        self.current_thread_id: Optional[str] = None
 
         app = QApplication.instance()
         if app:
@@ -139,16 +140,11 @@ class BookwormGUI(QMainWindow):
         self.thread_panel.update_thread_list(self.threads)
     
     def on_thread_selected(self, thread: Thread):
-        """Handle thread selection."""
-        # Clear current chat
-        self.chat_panel.messages.clear()
-        item = self.chat_panel.message_layout.itemAt(0)
-        if item:
-            widget = item.widget()
-            if widget:
-                self.chat_panel.message_layout.removeWidget(widget)
-        
-        # Load thread messages
+        if thread.id == self.current_thread_id:
+            return
+        # TODO: Save current thread state before switching
+        self.current_thread_id = thread.id
+        self.chat_panel.clear_messages()
         for message_data in thread.messages:
             message = Message.from_dict(message_data)
             self.chat_panel.add_message(message)

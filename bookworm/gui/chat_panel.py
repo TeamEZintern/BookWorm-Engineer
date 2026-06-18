@@ -133,6 +133,15 @@ class ChatPanel(QWidget):
         
         layout.addWidget(self.input_frame)
     
+    def clear_messages(self):
+        self.messages.clear()
+        while self.message_layout.count() > 0:
+            item = self.message_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self.message_layout.addStretch()
+        self.scroll_area.update()
+
     def add_message(self, message: 'Message'):
         """Add a message to the chat."""
         self.messages.append(message)

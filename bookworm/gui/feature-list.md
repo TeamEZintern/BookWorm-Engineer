@@ -1,5 +1,7 @@
 # BookWorm GUI — Feature List
 
+> In-depth design implementation log for the BookWorm GUI.
+
 ## GUI Mode Switching `DONE`
 GUI is default mode when running `bookworm`, terminal accessible with `bookworm terminal`
 
@@ -35,6 +37,8 @@ Shows thread name, creation/modified date, context menu
 Create, rename, delete, and switch between threads
 - [x] Create/delete functionality implemented
 - [ ] Rename in progress
+
+**Thread switching behaviour:** Clicking the currently active thread does nothing — the view stays unchanged. Clicking a different thread saves the current conversation and loads the selected one, replacing the chat panel content entirely.
 
 ### Search `TODO`
 Real-time thread filtering by name
