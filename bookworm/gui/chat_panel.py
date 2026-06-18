@@ -18,8 +18,8 @@ from .config import GUIConfig
 class Message:
     """Represents a message in the chat."""
     
-    def __init__(self, role: str, content: str, timestamp: datetime = None,
-                 tool_calls: List[Dict[str, Any]] = None):
+    def __init__(self, role: str, content: str, timestamp: Optional[datetime] = None,
+                 tool_calls: Optional[List[Dict[str, Any]]] = None):
         self.role = role  # "user" or "assistant"
         self.content = content
         self.timestamp = timestamp or datetime.now()
@@ -165,14 +165,13 @@ class ChatPanel(QWidget):
         if message.role == "assistant":
             # Render markdown
             content_widget = self.create_markdown_widget(message.content)
+            bubble_layout.addWidget(content_widget)
         else:
             # Plain text for user messages
             content_label = QLabel(message.content)
             content_label.setWordWrap(True)
             content_label.setStyleSheet("background-color: transparent; border: none;")
             bubble_layout.addWidget(content_label)
-        
-        bubble_layout.addWidget(content_widget)
         
         # Add to message layout
         self.message_layout.insertWidget(self.message_layout.count() - 1, bubble_frame)
@@ -251,7 +250,7 @@ class ChatPanel(QWidget):
         """Handle input text changes."""
         # Adjust height based on content
         document = self.message_input.document()
-        new_height = min(max(30, document.size().height()), 100)
+        new_height = min(max(30, int(document.size().height())), 100)
         self.message_input.setFixedHeight(new_height)
     
     def on_send_clicked(self):

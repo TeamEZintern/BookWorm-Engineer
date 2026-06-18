@@ -9,9 +9,9 @@ from datetime import datetime, timedelta
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QListWidget, 
     QListWidgetItem, QLineEdit, QPushButton, QLabel,
-    QMenu, QFrame, QToolTip
+    QMenu, QFrame, QToolTip, QComboBox
 )
-from PySide6.QtCore import Qt, QSortFilterProxyModel, QTimer, QEvent
+from PySide6.QtCore import Qt, QSortFilterProxyModel, QTimer, QEvent, Signal
 from PySide6.QtGui import QFont, QColor, QCursor
 
 from ..config import Config
@@ -20,7 +20,7 @@ class Thread:
     """Represents a conversation thread."""
     
     def __init__(self, thread_id: str, name: str, created_at: datetime, 
-                 updated_at: datetime, messages: List[Dict[str, Any]] = None):
+                 updated_at: datetime, messages: Optional[List[Dict[str, Any]]] = None):
         self.id = thread_id
         self.name = name
         self.created_at = created_at
@@ -57,6 +57,9 @@ class ThreadPanel(QWidget):
     - Sorting by name, date created, or date modified
     - Date grouping for chronological view
     """
+    
+    # Signal definitions
+    on_thread_selected = Signal(object)
     
     def __init__(self, config: GUIConfig, parent=None):
         super().__init__(parent)
@@ -116,7 +119,7 @@ class ThreadPanel(QWidget):
         self.search_timer.setSingleShot(True)
         self.search_timer.timeout.connect(self.apply_search_filter)
     
-    def update_thread_list(self, threads: List[Thread] = None):
+    def update_thread_list(self, threads: Optional[List[Thread]] = None):
         """Update the thread list with new threads."""
         if threads is not None:
             self.threads = threads
@@ -286,7 +289,3 @@ class ThreadPanel(QWidget):
         if reply == QMessageBox.Yes:
             self.threads.remove(thread)
             self.apply_sorting_and_filtering()
-    
-    # Signal definitions
-    from PySide6.QtCore import pyqtSignal
-    on_thread_selected = pyqtSignal(object)

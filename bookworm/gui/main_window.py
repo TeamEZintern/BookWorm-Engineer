@@ -14,7 +14,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 
 from .thread_panel import ThreadPanel, Thread
-from .chat_panel import ChatPanel
+from .chat_panel import ChatPanel, Message
 from .config import GUIConfig
 from ..config import Config
 
@@ -57,7 +57,7 @@ class BookwormGUI(QMainWindow):
         self.chat_panel = ChatPanel(self.gui_config)
         
         # Create splitter for resizable panels
-        splitter = QSplitter(Qt.Horizontal)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self.thread_panel)
         splitter.addWidget(self.chat_panel)
         splitter.setSizes([self.gui_config.thread_panel_width, 
@@ -96,7 +96,6 @@ class BookwormGUI(QMainWindow):
         
         # Select the first thread
         if self.threads:
-            from .chat_panel import Message
             self.chat_panel.add_message(
                 Message.from_dict(self.threads[0].messages[0])
             )
@@ -115,13 +114,15 @@ class BookwormGUI(QMainWindow):
         """Handle thread selection."""
         # Clear current chat
         self.chat_panel.messages.clear()
-        self.chat_panel.message_layout.removeWidget(
-            self.chat_panel.message_layout.itemAt(0).widget()
-        )
+        item = self.chat_panel.message_layout.itemAt(0)
+        if item:
+            widget = item.widget()
+            if widget:
+                self.chat_panel.message_layout.removeWidget(widget)
         
         # Load thread messages
         for message_data in thread.messages:
-            message = ChatPanel.Message.from_dict(message_data)
+            message = Message.from_dict(message_data)
             self.chat_panel.add_message(message)
     
     def closeEvent(self, event):
