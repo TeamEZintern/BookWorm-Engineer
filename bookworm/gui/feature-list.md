@@ -172,3 +172,71 @@ Sync thread state with agent backend
 Persistent storage of conversation history
 - [x] Persistence layer designed
 - [ ] Auto-save planned
+
+---
+
+## MVC Migration `TODO`
+Split monolithic panels into View (`Qt Designer .ui` + `pyside6-uic` generated `.py`), Controller, and Model layers.
+
+### Proposed file structure
+
+```
+bookworm/gui/
+├── __init__.py
+├── build_ui.py              # Finds .ui → runs pyside6-uic
+├── config.py
+├── themes.py
+│
+├── views/
+│   ├── window/
+│   │   ├── main_window.ui
+│   │   └── ui_main_window.py
+│   ├── panel/
+│   │   ├── thread_panel.ui
+│   │   ├── ui_thread_panel.py
+│   │   ├── chat_panel.ui
+│   │   └── ui_chat_panel.py
+│   └── widget/
+│       ├── message_bubble.ui
+│       ├── ui_message_bubble.py
+│       ├── thread_item.ui
+│       └── ui_thread_item.py
+│
+├── controllers/
+│   ├── __init__.py
+│   ├── app_controller.py
+│   ├── thread_controller.py
+│   └── chat_controller.py
+│
+└── models/
+    ├── __init__.py
+    ├── thread.py
+    ├── message.py
+    └── thread_store.py
+```
+
+### Design decisions
+- [x] `.ui` and generated `ui_*.py` sit side-by-side in the same subfolder
+- [x] Both committed to git
+- [x] `.ui` files conform to the Qt Designer UI file format (`qt-designer-schema.xml`)
+- [x] Developers run `pyside6-uic` on `.ui` files via `build_ui.py`
+- [x] Controller uses `findChild()` to wire up widget signals (no view wrapper layer)
+- [ ] View files (.ui + generated) created
+- [ ] Controller files created (app, thread, chat)
+- [ ] Model files extracted (thread, message, thread_store)
+- [ ] Monolithic panels deleted (chat_panel.py, thread_panel.py, main_window.py reworked)
+
+### `.ui` to `.py` conversion (`pyside6-uic`)
+
+Regular conversion is handled by `build_ui.py`, which walks the `views/` directory tree, finds all `.ui` files, and runs `pyside6-uic <file>.ui -o ui_<file>.py` in the same folder.
+
+Based on [PySide6 docs](https://doc.qt.io/qtforpython-6/tools/pyside-uic.html):
+
+- `pyside6-uic` is a CLI wrapper around Qt's `uic` tool with Python support
+- Convert a `.ui` file: `pyside6-uic your_file.ui -o ui_your_file.py`
+- The `-o` flag writes output to a file (without it, output goes to stdout)
+- Generates a class `Ui_TheNameOfYourDesign(object)` with a `setupUi(widget)` method
+- Usage in code: instantiate the `Ui_*` class and call `setupUi(self)` on a matching Qt widget (e.g. `QWidget`, `QDialog`, `QMainWindow`)
+- Do **not** hand-edit generated files — changes are lost on re-generation
+- Prefer `pyside6-uic` over raw `uic -g python` to avoid version mismatches
+- For a full list of options: `pyside6-uic -h`
