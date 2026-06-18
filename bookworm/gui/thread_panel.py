@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem, QLineEdit, QPushButton, QLabel,
     QMenu, QFrame, QToolTip, QComboBox
 )
-from PySide6.QtCore import Qt, QSortFilterProxyModel, QTimer, QEvent, Signal
+from PySide6.QtCore import Qt, QTimer, QEvent, Signal
 from PySide6.QtGui import QFont, QColor, QCursor
 
 from ..config import Config
@@ -108,11 +108,6 @@ class ThreadPanel(QWidget):
         self.thread_list.customContextMenuRequested.connect(self.on_context_menu_requested)
         
         layout.addWidget(self.thread_list, 1)
-        
-        # Set up proxy model for filtering and sorting
-        self.proxy_model = QSortFilterProxyModel()
-        self.proxy_model.setSourceModel(self.thread_list.model())
-        self.thread_list.setModel(self.proxy_model)
         
         # Set up timer for search debouncing
         self.search_timer = QTimer()
