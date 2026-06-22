@@ -102,17 +102,19 @@ class Agent:
 
     def _run_turn(self) -> str:
         while True:
-            response = self.client.chat.completions.create(
-                model=self.config.llm_model,
-                messages=self.messages,
-                tools=self.tool_registry.schema,
-                tool_choice="auto",
-                extra_body={
+            kwargs: dict[str, Any] = {
+                "model": self.config.llm_model,
+                "messages": self.messages,
+                "tools": self.tool_registry.schema,
+                "tool_choice": "auto",
+            }
+            if "openrouter.ai" in self.config.llm_base_url:
+                kwargs["extra_body"] = {
                     "reasoning": {
                         "effort": "low",  # options: "low" | "medium" | "high"
                     }
-                },
-            )
+                }
+            response = self.client.chat.completions.create(**kwargs)
 
             reply = response.choices[0].message
 
