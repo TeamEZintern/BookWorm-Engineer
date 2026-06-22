@@ -9,7 +9,7 @@ area. Wires widget signals via ``findChild()``.
 import re
 from typing import List
 
-from PySide6.QtCore import QObject, QTimer, Qt
+from PySide6.QtCore import QObject, QTimer, Qt, Signal
 from PySide6.QtGui import QGuiApplication, QTextBlockFormat, QTextCursor
 from PySide6.QtWidgets import (
     QWidget, QLabel, QScrollArea, QFrame, QTextEdit,
@@ -23,6 +23,8 @@ from ..views.panel.ui_chat_panel import Ui_ChatPanel
 
 class ChatController(QObject):
     """Controller for the main chat interface."""
+
+    messages_changed = Signal()
 
     INPUT_MAX_HEIGHT = 120
     INPUT_STYLE_PADDING = 8
@@ -153,6 +155,11 @@ class ChatController(QObject):
         self.messages.append(message)
         self.display_message(message)
         self.scroll_to_bottom()
+        self.messages_changed.emit()
+
+    def get_message_dicts(self):
+        """Return the current conversation for persistence."""
+        return [message.to_dict() for message in self.messages]
 
     def display_message(self, message: Message):
         """Display a single message in the chat."""
@@ -269,6 +276,7 @@ class ChatController(QObject):
             self.message_layout.removeWidget(widget)
             widget.deleteLater()
             message.display_widget = None
+        self.messages_changed.emit()
 
     def _redo_assistant_message(self, message: Message):
         """Remove the agent response and request a new one from the agent."""

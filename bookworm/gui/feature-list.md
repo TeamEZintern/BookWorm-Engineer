@@ -132,19 +132,19 @@ Backend data structures and storage for GUI functionality
 - [x] Thread model created
 - [x] Storage abstraction implemented
 
-### Thread Storage `DOING`
+### Thread Storage `DONE`
 
 JSON files stored in `.bookworm/threads/` directory
 
-- [x] File path structure defined
-- [ ] Persistence layer planned
+- [x] File path structure defined (`<thread_id>.json`)
+- [x] Persistence layer implemented in `ThreadStore`
 
 ### Thread Schema `DONE`
 
 Structured JSON schema with id, name, timestamps, and messages
 
 - [x] Data model defined
-- [x] Schema validation implemented
+- [x] Schema validation implemented (`validate_thread_data`, `validate_message_data`)
 
 ### Draft Persistence `TODO`
 
@@ -211,19 +211,21 @@ Real-time communication with Bookworm agent
 - [x] Connection interface designed
 - [ ] Message passing planned
 
-### Thread Synchronization `TODO`
+### Thread Synchronization `DOING`
 
 Sync thread state with agent backend
 
-- [x] Sync logic defined
-- [ ] Implementation pending
+- [x] Active thread messages saved before switching threads
+- [x] Create, rename, and delete update the JSON store
+- [ ] Agent backend sync pending
 
-### Message Persistence `TODO`
+### Message Persistence `DOING`
 
 Persistent storage of conversation history
 
-- [x] Persistence layer designed
-- [ ] Auto-save planned
+- [x] Messages saved to the active thread JSON on each chat update
+- [x] Threads loaded from `.bookworm/threads/` on startup
+- [ ] Agent backend streaming persistence pending
 
 ---
 
@@ -273,7 +275,7 @@ bookworm/gui/
 - [x] Both committed to git
 - [x] `.ui` files conform to the Qt Designer UI file format (`qt-designer-schema.xml`)
 - [x] Layout source of truth is the `.ui` files — edit them in Qt Designer (or equivalent), not by hand-editing XML
-- [x] Thread row template is ``views/widget/thread_item.ui``; ``thread_panel.ui`` only defines the empty ``QListWidget`` — thread names are runtime data, not static Designer entries
+- [x] Thread row template is `views/widget/thread_item.ui`; `thread_panel.ui` only defines the empty `QListWidget` — thread names are runtime data, not static Designer entries
 - [x] Do **not** hand-edit `ui_*.py` — they are generated output and will be overwritten on the next build
 - [x] Controller uses `findChild()` to wire up widget signals (no view wrapper layer)
 - [x] View files (.ui + generated) created
@@ -295,7 +297,7 @@ Based on [PySide6 docs](https://doc.qt.io/qtforpython-6/tools/pyside-uic.html):
 - Convert a `.ui` file: `pyside6-uic your_file.ui -o ui_your_file.py`
 - The `-o` flag writes output to a file (without it, output goes to stdout)
 - Generates a class `Ui_TheNameOfYourDesign(object)` with a `setupUi(widget)` method
-- Usage in code: instantiate the `Ui_`* class and call `setupUi(self)` on a matching Qt widget (e.g. `QWidget`, `QDialog`, `QMainWindow`)
+- Usage in code: instantiate the `Ui`_* class and call `setupUi(self)` on a matching Qt widget (e.g. `QWidget`, `QDialog`, `QMainWindow`)
 - Do **not** hand-edit `ui_*.py` — changes are lost on re-generation; put layout changes in the `.ui` file instead
 - Prefer `pyside6-uic` over raw `uic -g python` to avoid version mismatches
 - For a full list of options: `pyside6-uic -h`

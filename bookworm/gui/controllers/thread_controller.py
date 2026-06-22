@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem, QLabel, QMenu, QInputDialog, QMessageBox,
 )
 
-from ..models import Thread
+from ..models import Thread, default_thread_name
 from ..themes import get_colors
 from ..views.panel.ui_thread_panel import Ui_ThreadPanel
 from ..views.widget.ui_thread_item import Ui_ThreadItem
@@ -42,6 +42,9 @@ class ThreadController(QObject):
     THREAD_ITEM_SPACING = 2
 
     thread_selected = Signal(object)
+    thread_created = Signal(object)
+    thread_renamed = Signal(object)
+    thread_deleted = Signal(object)
     theme_toggle_requested = Signal()
 
     def __init__(self, config, parent=None):
@@ -314,16 +317,15 @@ class ThreadController(QObject):
 
     def on_new_thread_clicked(self):
         """Handle new thread button click."""
+        now = datetime.now()
         new_thread = Thread(
             thread_id=str(uuid.uuid4()),
-            name="New Thread",
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            name=default_thread_name(now),
+            created_at=now,
+            updated_at=now,
             messages=[]
         )
-        self.threads.append(new_thread)
-        self.apply_sorting_and_filtering()
-        self.on_thread_clicked(self.thread_list.item(self.thread_list.count() - 1))
+        self.thread_created.emit(new_thread)
 
     def on_thread_clicked(self, item: QListWidgetItem):
         """Handle thread selection."""
@@ -361,7 +363,7 @@ class ThreadController(QObject):
         if ok and new_name:
             thread.name = new_name
             thread.updated_at = datetime.now()
-            self.apply_sorting_and_filtering()
+            self.thread_renamed.emit(thread)
 
     def delete_thread(self, thread: Thread):
         """Delete a thread."""
@@ -373,5 +375,4 @@ class ThreadController(QObject):
         )
 
         if reply == QMessageBox.StandardButton.Yes:
-            self.threads.remove(thread)
-            self.apply_sorting_and_filtering()
+            self.thread_deleted.emit(thread)

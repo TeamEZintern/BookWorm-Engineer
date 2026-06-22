@@ -1,0 +1,13 @@
+{
+  "id": "d6d096c1-9c71-4cd7-aba2-93150bf1a1cb",
+  "name": "New Thread",
+  "created_at": "2026-06-22T15:16:03.493108",
+  "updated_at": "2026-06-22T15:16:03.493108",
+  "messages": [
+    {
+      "role": "assistant",
+      "content": "Welcome to Bookworm GUI! This is a graphical interface for the Bookworm AI coding assistant. You can create, rename, and delete threads, and chat with the agent.",
+      "timestamp": "2026-06-22T15:16:03.493108"
+    }
+  ]
+}
