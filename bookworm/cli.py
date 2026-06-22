@@ -24,12 +24,12 @@ def main() -> int:
 
     if subcommand == "gui":
         from PySide6.QtWidgets import QApplication
-        from .gui import BookwormGUI, GUIConfig
+        from .gui import AppController, GUIConfig
 
         app = QApplication(sys.argv)
         gui_config = GUIConfig.from_config(config)
-        window = BookwormGUI(config, gui_config)
-        window.show()
+        controller = AppController(config, gui_config)
+        controller.window.show()
         return app.exec()
     
     if subcommand == "terminal":

@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QApplication
 sys.path.insert(0, '/workspace/BookWorm-Engineer')
 
 from bookworm.config import load_config
-from bookworm.gui import BookwormGUI, GUIConfig
+from bookworm.gui import AppController, GUIConfig
 def main():
     """Main function to test the GUI."""
     # Load configuration
@@ -26,8 +26,8 @@ def main():
     app = QApplication(sys.argv)
     
     # Create and show the main window
-    window = BookwormGUI(config, gui_config)
-    window.show()
+    controller = AppController(config, gui_config)
+    controller.window.show()
     
     # Run the application
     sys.exit(app.exec())
