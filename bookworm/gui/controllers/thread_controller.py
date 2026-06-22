@@ -11,9 +11,9 @@ import uuid
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 
-from PySide6.QtCore import QObject, Qt, QTimer, Signal
+from PySide6.QtCore import QObject, Qt, QTimer, Signal, QSize
 from PySide6.QtWidgets import (
-    QWidget, QLineEdit, QPushButton, QListWidget,
+    QWidget, QFrame, QLineEdit, QPushButton, QListWidget,
     QListWidgetItem, QLabel, QMenu, QInputDialog, QMessageBox,
 )
 
@@ -32,7 +32,14 @@ class ThreadController(QObject):
     - Search functionality
     - Sorting by name, date created, or date modified
     - Date grouping for chronological view
+
+    Thread row layout lives in ``views/widget/thread_item.ui`` (one template per
+    row). ``thread_panel.ui`` only holds the empty ``QListWidget``; names are
+    filled at runtime from ``Thread`` data.
     """
+
+    THREAD_ITEM_HEIGHT = 28
+    THREAD_ITEM_SPACING = 2
 
     thread_selected = Signal(object)
     theme_toggle_requested = Signal()
@@ -137,13 +144,10 @@ class ThreadController(QObject):
             QListWidget::item {{
                 background-color: transparent;
                 border: none;
-                border-left: 3px solid transparent;
-                padding: 2px 8px 2px 12px;
+                padding: 0px 8px;
             }}
             QListWidget::item:selected {{
                 background-color: transparent;
-                color: {c['text_primary']};
-                border-left: 3px solid {c['accent']};
             }}
         """)
 
@@ -206,26 +210,41 @@ class ThreadController(QObject):
                     f"Modified: {thread.updated_at.strftime('%Y-%m-%d %H:%M')}"
                 )
                 item_widget = self._create_thread_item_widget(thread)
-                item_widget.adjustSize()
-                item.setSizeHint(item_widget.sizeHint())
+                row_height = self.THREAD_ITEM_HEIGHT + self.THREAD_ITEM_SPACING
+                item.setSizeHint(QSize(0, row_height))
                 self.thread_list.addItem(item)
                 self.thread_list.setItemWidget(item, item_widget)
 
                 if thread.id == self.active_thread_id:
                     self.thread_list.setCurrentItem(item)
 
-    def _create_thread_item_widget(self, thread: Thread) -> QWidget:
+    def _create_thread_item_widget(self, thread: Thread) -> QFrame:
         """Build a thread item widget from ui_thread_item for the list row."""
-        widget = QWidget()
+        frame = QFrame()
         item_ui = Ui_ThreadItem()
-        item_ui.setupUi(widget)
-        widget.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        name_label = widget.findChild(QLabel, "nameLabel")
+        item_ui.setupUi(frame)
+        frame.setFixedHeight(self.THREAD_ITEM_HEIGHT)
+        frame.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+
+        is_active = thread.id == self.active_thread_id
+        c = self.colors
+        border = c["accent"] if is_active else c["border"]
+        frame.setStyleSheet(f"""
+            QFrame#threadItemFrame {{
+                background-color: {c['bg_primary']};
+                border: 1px solid {border};
+                border-radius: 4px;
+            }}
+            QLabel#nameLabel {{
+                color: {c['text_primary']};
+                background: transparent;
+                padding: 0px;
+            }}
+        """)
+
+        name_label = frame.findChild(QLabel, "nameLabel")
         name_label.setText(thread.name)
-        name_label.setStyleSheet(
-            f"color: {self.colors['text_primary']}; background: transparent;"
-        )
-        return widget
+        return frame
 
     def group_threads_by_date(self, threads: List[Thread]) -> Dict[str, List[Thread]]:
         """Group threads by date for display."""

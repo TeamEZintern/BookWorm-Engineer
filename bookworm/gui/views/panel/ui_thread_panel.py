@@ -58,8 +58,17 @@ class Ui_ThreadPanel(object):
 
         self.newThreadButton = QPushButton(ThreadPanel)
         self.newThreadButton.setObjectName(u"newThreadButton")
+        sizePolicy = QSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.newThreadButton.sizePolicy().hasHeightForWidth())
+        self.newThreadButton.setSizePolicy(sizePolicy)
         self.newThreadButton.setMinimumSize(QSize(36, 36))
         self.newThreadButton.setMaximumSize(QSize(36, 36))
+        font = QFont()
+        font.setFamilies([u"Consolas"])
+        font.setPointSize(20)
+        self.newThreadButton.setFont(font)
 
         self.headerLayout.addWidget(self.newThreadButton)
 
@@ -68,7 +77,7 @@ class Ui_ThreadPanel(object):
 
         self.threadList = QListWidget(ThreadPanel)
         self.threadList.setObjectName(u"threadList")
-        self.threadList.setSpacing(4)
+        self.threadList.setSpacing(2)
 
         self.panelLayout.addWidget(self.threadList)
 
@@ -81,14 +90,14 @@ class Ui_ThreadPanel(object):
     def retranslateUi(self, ThreadPanel):
         self.themeButton.setText(QCoreApplication.translate("ThreadPanel", u"Toggle Theme", None))
         self.searchInput.setPlaceholderText(QCoreApplication.translate("ThreadPanel", u"Search threads...", None))
-        self.sortButton.setText(QCoreApplication.translate("ThreadPanel", u"\u2630", None))
 #if QT_CONFIG(tooltip)
         self.sortButton.setToolTip(QCoreApplication.translate("ThreadPanel", u"Sort threads", None))
 #endif // QT_CONFIG(tooltip)
-        self.newThreadButton.setText(QCoreApplication.translate("ThreadPanel", u"+", None))
+        self.sortButton.setText(QCoreApplication.translate("ThreadPanel", u"\u2630", None))
 #if QT_CONFIG(tooltip)
         self.newThreadButton.setToolTip(QCoreApplication.translate("ThreadPanel", u"New Thread", None))
 #endif // QT_CONFIG(tooltip)
+        self.newThreadButton.setText(QCoreApplication.translate("ThreadPanel", u"+", None))
         pass
     # retranslateUi
 

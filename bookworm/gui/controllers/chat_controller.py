@@ -10,7 +10,7 @@ import re
 from typing import List
 
 from PySide6.QtCore import QObject, QTimer, Qt
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QGuiApplication, QTextBlockFormat, QTextCursor
 from PySide6.QtWidgets import (
     QWidget, QLabel, QScrollArea, QFrame, QTextEdit,
     QPushButton, QVBoxLayout, QHBoxLayout, QSizePolicy,
@@ -24,8 +24,8 @@ from ..views.panel.ui_chat_panel import Ui_ChatPanel
 class ChatController(QObject):
     """Controller for the main chat interface."""
 
-    INPUT_MIN_HEIGHT = 28
     INPUT_MAX_HEIGHT = 120
+    INPUT_STYLE_PADDING = 8
 
     def __init__(self, config, parent=None):
         super().__init__(parent)
@@ -50,7 +50,7 @@ class ChatController(QObject):
         self.message_input.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
-        self.message_input.document().setDocumentMargin(2)
+        self._configure_message_input_document()
         self.ui.inputLayout.setAlignment(
             self.send_button, Qt.AlignmentFlag.AlignBottom
         )
@@ -73,7 +73,7 @@ class ChatController(QObject):
                 color: {c['text_primary']};
                 border: 1px solid {c['border']};
                 border-radius: 5px;
-                padding: 8px;
+                padding: 4px 8px;
             }}
         """)
         self.send_button.setStyleSheet(f"""
@@ -94,16 +94,49 @@ class ChatController(QObject):
             }}
         """)
 
+    def _configure_message_input_document(self):
+        """Remove default block margins that add a phantom extra line."""
+        doc = self.message_input.document()
+        doc.setDocumentMargin(0)
+        cursor = QTextCursor(doc)
+        block_format = cursor.blockFormat()
+        block_format.setTopMargin(0)
+        block_format.setBottomMargin(0)
+        cursor.setBlockFormat(block_format)
+        self.message_input.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+
+    def _message_input_frame_height(self) -> int:
+        """Height for a single-line input including frame and padding."""
+        fm = self.message_input.fontMetrics()
+        frame = self.message_input.frameWidth() * 2
+        return fm.height() + frame + self.INPUT_STYLE_PADDING
+
     def _resize_message_input(self):
         """Grow the input with content, starting from a single-line height."""
         doc = self.message_input.document()
+        viewport_width = max(0, self.message_input.viewport().width())
+        doc.setTextWidth(viewport_width)
+
+        if not self.message_input.toPlainText():
+            content_height = self.message_input.fontMetrics().lineSpacing()
+        else:
+            content_height = int(doc.documentLayout().documentSize().height())
+
         frame = self.message_input.frameWidth() * 2
-        content_height = int(doc.size().height())
-        padding = 18
         new_height = max(
-            self.INPUT_MIN_HEIGHT,
-            min(content_height + frame + padding, self.INPUT_MAX_HEIGHT),
+            self._message_input_frame_height(),
+            min(content_height + frame + self.INPUT_STYLE_PADDING, self.INPUT_MAX_HEIGHT),
         )
+        if new_height >= self.INPUT_MAX_HEIGHT:
+            self.message_input.setVerticalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAsNeeded
+            )
+        else:
+            self.message_input.setVerticalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+            )
         self.message_input.setFixedHeight(new_height)
 
     def clear_messages(self):
