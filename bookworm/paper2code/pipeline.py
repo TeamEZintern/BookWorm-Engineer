@@ -7,7 +7,7 @@ from openai import OpenAI
 from ..config import Config
 from . import artifacts, prompts
 from .pdf import extract_text
-from .validation import _load_validated_or_initial_code,_run_validation
+from .validation import _load_validated_or_initial_code,_run_validation,ValidationResult
 
 MAX_VALIDATION_ATTEMPTS = 3
 
@@ -52,6 +52,24 @@ def _extract_json(text: str) -> dict:
 
     raise ValueError("No valid JSON object found in LLM response")
 
+def _resolve_generated_path(root: Path, filename: str) -> Path:
+      """Resolve an LLM-generated filename while keeping it inside root."""
+      if not filename or not filename.strip():
+          raise ValueError("Generated filename cannot be empty.")
+
+      relative_path = Path(filename)
+
+      if relative_path.is_absolute():
+          raise ValueError(f"Generated path must be relative: {filename}")
+
+      resolved_root = root.resolve()
+      resolved_path = (resolved_root / relative_path).resolve()
+
+      if not resolved_path.is_relative_to(resolved_root):
+          raise ValueError(f"Generated path escapes output directory: {filename}")
+
+      return resolved_path
+
 
 def _extract_code(text: str) -> str:
     match = re.search(r"```(?:python)?\s*([\s\S]+?)\s*```", text)
@@ -62,9 +80,51 @@ def _extract_code(text: str) -> str:
 def _write_files(output_dir: Path, files: dict[str, str]) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     for filename, code in files.items():
-        output_path = output_dir / filename
+        output_path = _resolve_generated_path(output_dir, filename)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(code, encoding="utf-8")
+
+def _read_task_files(output_dir: Path, task_list: list[str]) -> dict[str, str]:
+    """
+    Read the current files from output_dir.
+
+    This is important because validation may run determininstic tools like:
+        Ruff check . --fix
+    
+    That means the files on disk may become newer than current_files in memory.
+    """
+    files: dict[str, str] = {}
+
+    for filename in task_list:
+        path = _resolve_generated_path(output_dir, filename)
+        if path.exists():
+            files[filename] = path.read_text(encoding="utf-8")
+    
+    return files
+
+def _save_files_artifact(artifacts_dir: Path, prefix: str,files: dict[str,str]) -> None:
+    """
+    Save a dictionary of filename -> content into the artifact directory.
+
+    Example:
+        _save_files_artifact(
+            artifacts_dir,
+            "validation/attempt_1/files",
+            current_files,
+        )
+
+    Produces:
+        validation/attempt_1/files/main.py.txt
+        validation/attempt_1/files/models/model.py.txt
+        validation/attempt_1/files/tests/test_model.py.txt
+    """
+    artifact_root = _resolve_generated_path(artifacts_dir, prefix)
+    artifact_root.mkdir(parents=True, exist_ok=True)
+
+    for filename, content in files.items():
+        path = _resolve_generated_path(artifact_root, f"{filename}.txt")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
 
 def _extract_affected_files(log: str, task_list: list[str]) -> list[str]:
     affected: list[str] = []
@@ -85,12 +145,13 @@ def _triage_failure(
     config: Config,
     validation_log: str,
     task_list: list[str],
+    validation_report_json: str,
 ) -> dict:
     raw = _llm(
         client,
         config,
         prompts.TRIAGE_SYSTEM,
-        prompts.triage_prompt(validation_log, task_list)
+        prompts.triage_prompt(validation_log, task_list, validation_report_json)
     )
     return _extract_json(raw)
 
@@ -107,6 +168,13 @@ def _match_task_files(candidate_files: list[str], task_list: list[str]) -> list[
 
         if normalized in normalized_tasks:
             matched.append(normalized_tasks[normalized])
+            continue
+
+        # Sometimes logs/LLM triage only return basename, e.g. "main.py".
+        candidate_basename = Path(normalized).name
+        for normalized_task, original_task in normalized_tasks.items():
+            if Path(normalized_task).name == candidate_basename:
+                matched.append(original_task)
 
     return list(dict.fromkeys(matched))
 
@@ -114,20 +182,82 @@ def _affected_files_from_triage(
         triage: dict,
         task_list: list[str],
         fallback_files: list[str],
-) -> list[str]:
-    affected: list[str] = []
+) -> tuple[list[str], list[dict]]:
+    repairable_failures: list[dict] = []
+    dependency_issues: list[dict] =[]
 
     for failure in triage.get("failures", []):
         classification = failure.get("classification")
         if classification == "dependency_issue":
-            continue
+            dependency_issues.append(failure)
+        else: 
+            repairable_failures.append(failure)
+    
+    affected_files: list[str] = []
+
+    for failure in repairable_failures:
 
         candidate_files = failure.get("affected_files", [])
         if isinstance(candidate_files, list):
-            affected.extend(_match_task_files(candidate_files, task_list))
+            affected_files.extend(_match_task_files(candidate_files, task_list))
 
-    affected = list(dict.fromkeys(affected))
-    return affected or fallback_files
+    affected_files = list(dict.fromkeys(affected_files))
+
+    # Only fall back to filename-based repair when at least one
+    # failure is actually repairable.
+    if repairable_failures and not affected_files:
+        affected_files = fallback_files
+
+    return affected_files, dependency_issues
+
+def _build_validation_log_with_report(result, triage_json: str) -> str:
+    """
+    Build a repair log that includes both:
+      1. human-readable validation log
+      2. structured validation JSON
+      3. triage JSON
+    """
+    return (
+        result.log
+        + "\n\n"
+        + "Structured validation report:\n"
+        + "```json\n"
+        + result.to_json()
+        + "\n```\n\n"
+        + "Triage report:\n"
+        + "```json\n"
+        + triage_json
+        + "\n```"
+    )
+
+def _save_validation_attempt(artifacts_dir: Path, attempt: int, result: ValidationResult, files:dict[str, str]) -> None:
+    """
+    Save full validation artifacts for one attempt.
+
+    This gives a clean per-attempt snapshot:
+
+        validation/attempt_1/validation.log
+        validation/attempt_1/validation_report.json
+        validation/attempt_1/files/...
+    """
+
+    artifacts.save(artifacts_dir,f"validation/attempt_{attempt}/validation.log",result.log)
+    artifacts.save(artifacts_dir,f"validation/attempt_{attempt}/validation_report.json", result.to_json())
+    _save_files_artifact(artifacts_dir,f"validation/attempt_{attempt}/files", files)
+
+def _promote_validated_code(artifacts_dir: Path, files: dict[str, str]) -> None:
+    """
+    Only call this after the full repo passes validation.
+
+    This keeps validated_code honest:
+        - candidate code = latest repaired attempt
+        - validated_code = passed full validation
+    """
+    _save_files_artifact(
+        artifacts_dir,
+        "validated_code",
+        files,
+    )
 
 #------------------- Pipline Flow------------------------------------------
 def run_pipeline(
@@ -154,14 +284,33 @@ def run_pipeline(
         )
         artifacts.save(artifacts_dir, "overall_plan.txt", overall_plan)
 
-    # Stage 1b: Architecture
+    # Stage 1b: Success Criteria
+    success_criteria_raw = artifacts.load(artifacts_dir,"success_criteria.json")
+    if success_criteria_raw is None:
+        print("Planning: success criteria...")
+        raw = _llm(
+            client,
+            config,
+            prompts.SUCCESS_CRITERIA_SYSTEM,
+            prompts.success_criteria_prompt(paper_text, overall_plan),
+        )
+
+        try:
+            success_criteria = _extract_json(raw)
+        except (json.JSONDecodeError, ValueError) as exc:
+            return f"Failed to parse success criteria JSON: {exc}\n\nRaw response:\n{raw}"
+
+        success_criteria_raw = json.dumps(success_criteria, indent=2)
+        artifacts.save(artifacts_dir, "success_criteria.json",success_criteria_raw)
+
+    # Stage 1c: Architecture
     architecture_raw = artifacts.load(artifacts_dir, "architecture.txt")
     if architecture_raw is None:
         print("Planning: architecture...")
         architecture_raw = _llm(
             client, config,
             prompts.PLANNING_SYSTEM,
-            prompts.architecture_prompt(paper_text, overall_plan),
+            prompts.architecture_prompt(paper_text, overall_plan,success_criteria_raw),
         )
         artifacts.save(artifacts_dir, "architecture.txt", architecture_raw)
 
@@ -170,14 +319,14 @@ def run_pipeline(
     except (json.JSONDecodeError, ValueError) as exc:
         return f"Failed to parse architecture JSON: {exc}\n\nRaw response:\n{architecture_raw}"
 
-    # Stage 1c: Logic design
+    # Stage 1d: Logic design
     logic_raw = artifacts.load(artifacts_dir, "logic_design.txt")
     if logic_raw is None:
         print("Planning: logic design...")
         logic_raw = _llm(
             client, config,
             prompts.PLANNING_SYSTEM,
-            prompts.logic_design_prompt(paper_text, overall_plan, architecture_raw),
+            prompts.logic_design_prompt(paper_text, overall_plan, architecture_raw, success_criteria_raw),
         )
         artifacts.save(artifacts_dir, "logic_design.txt", logic_raw)
 
@@ -213,6 +362,7 @@ def run_pipeline(
                     logic_raw,
                     filename,
                     file_descriptions.get(filename, file_logic.get(filename, "")),
+                    success_criteria_raw,
                 ),
             )
             artifacts.save(artifacts_dir, artifact_name, analysis)
@@ -232,6 +382,7 @@ def run_pipeline(
                 prompts.coding_prompt(
                     paper_text,
                     overall_plan,
+                    success_criteria_raw,
                     logic_raw,
                     filename,
                     analyses[filename],
@@ -258,18 +409,28 @@ def run_pipeline(
         _write_files(output_dir, current_files)
 
         result = _run_validation(output_dir)
-        artifacts.save(artifacts_dir, f"validation/attempt_{attempt}.log", result.log)
+
+        #Ruff autofix may have changes files on disk.
+        disk_files = _read_task_files(output_dir, task_list)
+        if disk_files: 
+            current_files.update(disk_files)
+
+        _save_validation_attempt(artifacts_dir,attempt,result,current_files)
 
         if result.ok:
             validation_ok = True
-            artifacts.save(artifacts_dir, "validation/result.txt" , "passed")
+            artifacts.save(artifacts_dir, "validation/result.txt", "passed")
+
+            _promote_validated_code(artifacts_dir,current_files)
+
             break
 
         if attempt == MAX_VALIDATION_ATTEMPTS:
-            artifacts.save(artifacts_dir, "validation/result.txt", "failed")
+            artifacts.save(artifacts_dir,"validation/result.txt","failed")
             break
 
-        fallback_files = _extract_affected_files(result.log, task_list)
+        structured_failed_files = _match_task_files(result.failed_files, task_list)
+        fallback_files = structured_failed_files or _extract_affected_files(result.log, task_list)
 
         try: 
             triage = _triage_failure(
@@ -277,6 +438,7 @@ def run_pipeline(
                 config=config,
                 validation_log=result.log,
                 task_list=task_list,
+                validation_report_json=result.to_json(),
             )
         except Exception as exc: 
             triage = {
@@ -299,17 +461,46 @@ def run_pipeline(
             triage_json
         )
 
-        affected_files = _affected_files_from_triage(triage,task_list,fallback_files)
+        affected_files, dependency_issues = _affected_files_from_triage(triage,task_list,fallback_files)
 
-        repair_log = (
-            result.log
-            + "\n\n"
-            + "Triage report:\n"
-            + "```json\n"
-            + triage_json
-            + "\n```"
-        )
+        if dependency_issues and not affected_files:
+            dependency_report = json.dumps(
+                {
+                    "status": "blocked",
+                    "reason": "dependency_issue",
+                    "required_packages": logic.get("packages", []),
+                    "failures": dependency_issues,
+                },
+                indent=2,
+            )
 
+            artifacts.save(
+                artifacts_dir,
+                f"validation/attempt_{attempt}/dependency_report.json",
+                dependency_report,
+            )
+
+            artifacts.save(
+                artifacts_dir,
+                "validation/result.txt",
+                "blocked_by_dependency",
+            )
+
+            reasons = [
+                failure.get("reason", "Unknown dependency failure")
+                for failure in dependency_issues
+            ]
+
+            return (
+                "Paper-to-code generation stopped because required dependencies "
+                "are unavailable.\n"
+                f"Required packages: {', '.join(logic.get('packages', [])) or
+                'unknown'}\n"
+                f"Reasons: {'; '.join(reasons)}\n"
+                f"Artifacts saved to: {artifacts_dir}"
+            )
+
+        repair_log = _build_validation_log_with_report(result,triage_json)
         print(
             "Validation failed; repairing "
             f"{len(affected_files)} affected file(s), attempt {attempt}..."
@@ -325,28 +516,28 @@ def run_pipeline(
                 prompts.repair_prompt(
                     paper_text,
                     overall_plan,
+                    success_criteria_raw,
                     logic_raw,
                     filename,
                     current_files[filename],
                     repair_log,
-                    current_files,
+                    repaired_files,
                 )
             )
 
             repaired = _extract_code(raw)
             repaired_files[filename] = repaired
+
             artifacts.save(
                 artifacts_dir,
                 f"repair/attempt_{attempt}/{filename}.txt",
                 repaired,
             )
-            artifacts.save(
-                artifacts_dir,
-                f"validated_code/{filename}.txt",
-                repaired,
-            )
 
         current_files = repaired_files
+
+        _save_files_artifact(artifacts_dir,"candidate_code",current_files,)
+        _save_files_artifact(artifacts_dir, f"candidate_snapshots/attempt_{attempt}", current_files)
 
     _write_files(output_dir,current_files)
 
@@ -357,7 +548,7 @@ def run_pipeline(
 
     return (
         f"Generated {len(task_list)} files in {output_dir}\n"
-         f"Validation: {validation_status}\n"
+        f"Validation: {validation_status}\n"
         f"Required packages: {package_list}\n"
         f"Artifacts saved to: {artifacts_dir}"
     )

@@ -17,6 +17,9 @@ dependencies = [
     "chromadb",
     "sentence-transformers",
     "pypdf",
+    "pypdf",
+    "pytest",
+    "ruff",
 ]
 
 [project.optional-dependencies]

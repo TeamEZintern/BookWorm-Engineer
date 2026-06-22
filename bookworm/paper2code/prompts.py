@@ -1,22 +1,36 @@
 PLANNING_SYSTEM = (
     "You are an expert research engineer. "
-    "Your task is to analyze a research paper and plan a complete, runnable implementation."
+    "Analyze the research paper and plan a complete, runnable implementation."
+)
+
+SUCCESS_CRITERIA_SYSTEM = (
+    "You are an expert research reproducibility engineer. "
+    "Extract concrete, testable success criteria from a research paper. "
+    "Return only one complete, valid JSON object without Markdown fences."
+)
+
+ARCHITECTURE_SYSTEM = (
+    "You are an expert software architect. "
+    "Return only one complete, valid JSON object without Markdown fences or "
+    "explanatory text. Ensure every array and object is closed."
 )
 
 ANALYSIS_SYSTEM = (
     "You are an expert software engineer. "
-    "Your task is to analyze how a specific file should be implemented before any code is written."
+    "Analyze how a specific file should be implemented before code is written."
 )
 
 CODING_SYSTEM = (
     "You are an expert software engineer implementing research code. "
-    "Write complete, runnable Python files. Return only the file content inside a ```python``` block."
+    "Write complete, runnable Python files. "
+    "Return only the file content inside a ```python``` block."
 )
 
 TRIAGE_SYSTEM = (
-    "You are an expert software engineer test triage assistant. "
-    "Classify validation failures before code repair. "
-    "Return only valid JSON. "
+    "You are an expert software validation triage assistant. "
+    "Classify failed validation checks before code repair. "
+    "Validation checks may include compileall, import smoke tests, Ruff "
+    "linting, and pytest. Return only one complete, valid JSON object."
 )
 
 REPAIR_SYSTEM = (
@@ -29,48 +43,130 @@ def overall_plan_prompt(paper_text: str) -> str:
     return (
         "Here is a research paper:\n\n"
         f"{paper_text}\n\n"
-        "Create a detailed plan to reproduce the implementation described in this paper. "
-        "Cover: the core algorithm or model, the experimental setup, and the key components needed."
+        "Create a detailed plan to reproduce the implementation described in "
+        "this paper. Cover the core algorithm or model, experimental setup, "
+        "and key components required."
     )
 
 
-def architecture_prompt(paper_text: str, overall_plan: str) -> str:
+def success_criteria_prompt(paper_text: str, overall_plan: str) -> str:
+    return (
+        "Here is a research paper:\n\n"
+        f"{paper_text}\n\n"
+        "Overall implementation plan:\n"
+        f"{overall_plan}\n\n"
+        "Extract success criteria that can validate the generated "
+        "implementation. Separate deterministic unit-test criteria from "
+        "optional, expensive reproducibility criteria.\n\n"
+        "Return exactly this JSON shape:\n"
+        "{\n"
+        '  "unit_test_criteria": [\n'
+        "    {\n"
+        '      "id": "C1",\n'
+        '      "claim": "...",\n'
+        '      "expected_behavior": "...",\n'
+        '      "test_strategy": "...",\n'
+        '      "source_section": "...",\n'
+        '      "confidence": "high | medium | low"\n'
+        "    }\n"
+        "  ],\n"
+        '  "reproducibility_criteria": [\n'
+        "    {\n"
+        '      "id": "R1",\n'
+        '      "metric": "...",\n'
+        '      "reported_value": "...",\n'
+        '      "dataset": "...",\n'
+        '      "evaluation_protocol": "...",\n'
+        '      "required_compute": "small | medium | large | unknown",\n'
+        '      "source_section": "...",\n'
+        '      "confidence": "high | medium | low"\n'
+        "    }\n"
+        "  ],\n"
+        '  "unverifiable_claims": [\n'
+        "    {\n"
+        '      "claim": "...",\n'
+        '      "reason": "..."\n'
+        "    }\n"
+        "  ]\n"
+        "}\n\n"
+        "Rules:\n"
+        "- Do not invent results not stated in the paper.\n"
+        "- Prefer criteria that can become deterministic pytest tests.\n"
+        "- Put large training runs under reproducibility_criteria.\n"
+        "- Put vague or underspecified claims under unverifiable_claims.\n"
+        "- Return JSON only and close every array and object."
+    )
+
+
+def architecture_prompt(
+    paper_text: str,
+    overall_plan: str,
+    success_criteria: str,
+) -> str:
     return (
         "Here is a research paper:\n\n"
         f"{paper_text}\n\n"
         "Overall plan:\n"
         f"{overall_plan}\n\n"
-        "Design the software architecture. "
-        "Return a JSON object with exactly these keys:\n"
-        '  "files": list of {"name": filename, "description": purpose}\n'
-        '  "dependencies": mapping of filename to list of filenames it imports from\n'
-        "Separate implementation files from test files."
-        "Pytest files must live under tests/ and be named test_<module>.py."
-        "Do not place unit tests, pytest functions, unittest classes, test fixtures, or __main__ test blocks inside implementation files."
-        "Return implementation files and test files separately in the architecture. Include pytest tests for core behaviour."
-        'The "files" list must include both implementation files and pytest files.'
-        "Test files must use names like tests/test_model.py."
-        "All files must be Python (.py). Include a main entry point."
+        "Paper-derived success criteria:\n"
+        f"{success_criteria}\n\n"
+        "Design the software architecture.\n\n"
+        "Return exactly one complete JSON object with this shape:\n"
+        "{\n"
+        '  "files": [\n'
+        "    {\n"
+        '      "name": "relative/path.py",\n'
+        '      "description": "purpose"\n'
+        "    }\n"
+        "  ],\n"
+        '  "dependencies": {\n'
+        '    "relative/path.py": ["dependency.py"]\n'
+        "  }\n"
+        "}\n\n"
+        "Rules:\n"
+        "- Return JSON only, without Markdown fences or commentary.\n"
+        "- Close every array and object, including the outer JSON object.\n"
+        "- Include implementation files and pytest files.\n"
+        "- All filenames must be relative paths ending in .py.\n"
+        "- Pytest files must be under tests/ and named test_<module>.py.\n"
+        "- Put production code only in implementation files.\n"
+        "- Put tests, fixtures, and assertions only in test files.\n"
+        "- Add feasible deterministic tests for relevant unit-test criteria.\n"
+        "- Tests must not require network access, GPUs, large datasets, or "
+        "long training runs.\n"
+        "- Include a main entry point."
     )
 
 
-def logic_design_prompt(paper_text: str, overall_plan: str, architecture: str) -> str:
+def logic_design_prompt(
+    paper_text: str,
+    overall_plan: str,
+    architecture: str,
+    success_criteria: str,
+) -> str:
     return (
         "Here is a research paper:\n\n"
         f"{paper_text}\n\n"
         "Overall plan:\n"
         f"{overall_plan}\n\n"
+        "Paper-derived success criteria:\n"
+        f"{success_criteria}\n\n"
         "Architecture:\n"
         f"{architecture}\n\n"
-        "Design the implementation logic. "
-        "Return a JSON object with exactly these keys:\n"
-        '  "packages": list of pip package names required\n'
-        '  "task_list": ordered list of filenames to implement (dependencies first) and pytest files after the implementation files they test\n'
-        '  "logic": mapping of filename to a description of its key functions and data flow'
-        'The "task_list" must list implementation files first, then pytest files under tests/.'
-        "Tests should depend on the implementation files they test."
-        "Do not include inline tests in implementation modules"
-        "All pytest test functions, fixtures, assertions, and test helpers must be placed in tests/ files only."
+        "Design the implementation logic.\n\n"
+        "Return exactly one complete JSON object with these keys:\n"
+        '- "packages": list of required pip package names\n'
+        '- "task_list": ordered list of filenames, dependencies first\n'
+        '- "logic": mapping of filename to key functions and data flow\n\n'
+        "Rules:\n"
+        "- Return JSON only and close every array and object.\n"
+        "- List implementation files before the pytest files that test them.\n"
+        "- Keep tests under tests/.\n"
+        "- Do not put tests inside implementation modules.\n"
+        "- Tests should cover deterministic behavior, shapes, edge cases, "
+        "smoke checks, and feasible unit-test criteria.\n"
+        "- Avoid network access, GPUs, large datasets, long training runs, and "
+        "exact reproduction of stochastic metrics."
     )
 
 
@@ -81,83 +177,117 @@ def analysis_prompt(
     logic_design: str,
     filename: str,
     file_description: str,
+    success_criteria: str,
 ) -> str:
     return (
         "Here is a research paper:\n\n"
         f"{paper_text}\n\n"
         "Overall plan:\n"
         f"{overall_plan}\n\n"
+        "Paper-derived success criteria:\n"
+        f"{success_criteria}\n\n"
         "Architecture:\n"
         f"{architecture}\n\n"
         "Logic design:\n"
         f"{logic_design}\n\n"
         f"Analyze how to implement `{filename}` ({file_description}). "
-        "Describe: key classes and functions, data flow, algorithms used, and edge cases to handle. "
-        "Do not write code yet."
+        "Describe its classes and functions, data flow, algorithms, public "
+        "interfaces, dependencies, and edge cases. Do not write code yet."
     )
 
 
 def coding_prompt(
     paper_text: str,
     overall_plan: str,
+    success_criteria: str,
     logic_design: str,
     filename: str,
     file_analysis: str,
     prior_files: dict[str, str],
 ) -> str:
     prior = "\n\n".join(
-        f"# {name}\n```python\n{code}\n```" for name, code in prior_files.items()
+        f"# {name}\n```python\n{code}\n```"
+        for name, code in prior_files.items()
     )
-    prior_section = f"Previously implemented files:\n\n{prior}\n\n" if prior else ""
+    prior_section = (
+        f"Previously implemented files:\n\n{prior}\n\n"
+        if prior
+        else ""
+    )
 
     return (
         "Here is a research paper:\n\n"
         f"{paper_text}\n\n"
         "Overall plan:\n"
         f"{overall_plan}\n\n"
+        "Paper-derived success criteria:\n"
+        f"{success_criteria}\n\n"
         "Logic design:\n"
         f"{logic_design}\n\n"
         f"{prior_section}"
         f"Analysis for `{filename}`:\n"
         f"{file_analysis}\n\n"
-        f"Implement `{filename}` completely. "
-        "If this filename is a pytest file, implement meaningful pytest for the corresponding module."
-        "Tests should focus on deterministic behavior, input/output shapes, edge cases, and smoke checks."
-        "Avoid tests that require network access, large datasets, GPUs, or long training runs."
-        f"""Testing rules:
-- If `{filename}` is under `tests/`, write pytest tests only.
-- If `{filename}` is not under `tests/`, write production implementation only.
-- Do not include pytest imports, test_* functions, unittest.TestCase classes, fixtures, or assertion-based unit tests in production files.
-- Do not add `if __name__ == "__main__"` blocks for running tests.
-- Production files may include a minimal CLI/demo main only if this file is the planned entry point.
-"""
-        "Return the full file content inside a ```python``` block."
+        f"Implement `{filename}` completely.\n\n"
+        "Rules:\n"
+        f"- If `{filename}` is under tests/, write pytest tests only.\n"
+        f"- If `{filename}` is not under tests/, write production code only.\n"
+        "- Do not put pytest imports, test functions, unittest classes, "
+        "fixtures, or assertion-based unit tests in production files.\n"
+        "- Test deterministic behavior, shapes, edge cases, and smoke paths.\n"
+        "- Do not require network access, GPUs, large datasets, or long runs.\n"
+        "- Do not add a test-running __main__ block.\n"
+        "- A planned entry point may include a minimal guarded CLI or demo.\n"
+        "- Return the full file content inside one ```python``` block."
     )
+
 
 def triage_prompt(
     validation_log: str,
     task_list: list[str],
+    validation_report_json: str | None = None,
 ) -> str:
-    
     files = "\n".join(f"- {filename}" for filename in task_list)
 
+    structured_report = ""
+    if validation_report_json:
+        structured_report = (
+            "Structured validation report:\n"
+            "```json\n"
+            f"{validation_report_json}\n"
+            "```\n\n"
+        )
+
     return (
-        "Classify each pytest failure in this validation log.\n\n"
+        "Classify every failed validation check.\n\n"
+        "Checks may include:\n"
+        "- compileall: Python syntax errors\n"
+        "- import_smoke: import-time failures\n"
+        "- ruff_autofix: deterministic Ruff fixes\n"
+        "- ruff: remaining lint failures\n"
+        "- pytest: test collection or execution failures\n\n"
         "Valid classifications:\n"
+        "- syntax_error\n"
+        "- import_error\n"
+        "- lint_issue\n"
         "- implementation_bug\n"
         "- test_bug\n"
         "- dependency_issue\n"
         "- unclear\n\n"
         "Known project files:\n"
         f"{files}\n\n"
+        f"{structured_report}"
         "Validation log:\n"
-        f"```text\n{validation_log}\n```\n\n"
+        "```text\n"
+        f"{validation_log}\n"
+        "```\n\n"
         "Return exactly this JSON shape:\n"
         "{\n"
         '  "failures": [\n'
         "    {\n"
-        '      "test": "...",\n'
-        '      "classification": "implementation_bug | test_bug | dependency_issue | unclear",\n'
+        '      "check": "compileall | import_smoke | ruff_autofix | ruff | '
+        'pytest | unknown",\n'
+        '      "classification": "syntax_error | import_error | lint_issue | '
+        'implementation_bug | test_bug | dependency_issue | unclear",\n'
         '      "affected_files": ["..."],\n'
         '      "reason": "...",\n'
         '      "recommended_action": "..."\n'
@@ -165,17 +295,18 @@ def triage_prompt(
         "  ]\n"
         "}\n\n"
         "Rules:\n"
-        "- Only include files from the known project files list in affected_files.\n"
-        "- If the implementation is wrong, classify as implementation_bug.\n"
-        "- If the test expectation is wrong or brittle, classify as test_bug.\n"
-        "- If the failure is caused by a missing package or environment issue, classify as dependency_issue.\n"
-        "- If there is not enough evidence, classify as unclear.\n"
-        "- Return JSON only."
+        "- Return JSON only and close every array and object.\n"
+        "- Missing external packages are dependency_issue.\n"
+        "- Only include filenames from the known project-file list.\n"
+        "- Prefer filenames explicitly present in the structured report.\n"
+        "- Use an empty affected_files list when the files are unclear."
     )
+
 
 def repair_prompt(
     paper_text: str,
     overall_plan: str,
+    success_criteria: str,
     logic_design: str,
     filename: str,
     current_code: str,
@@ -183,30 +314,39 @@ def repair_prompt(
     prior_files: dict[str, str],
 ) -> str:
     prior = "\n\n".join(
-        f" # {name}\n```python```\n{code}\n```"
+        f"# {name}\n```python\n{code}\n```"
         for name, code in prior_files.items()
         if name != filename
     )
-    prior_section = f"Other current files:\n\n{prior}\n\n"
+    prior_section = f"Other current files:\n\n{prior}\n\n" if prior else ""
 
     return (
-        f"""
-Here is a research paper:\n\n{paper_text}\n\n
-
-Overall plan:\n {overall_plan}\n\n
-
-Logic desgin:\n{logic_design}\n\n
-
-{prior_section}
-
-Validation failed with this log:\n```text\n{validation_log}\n```\n\n
-
-Current content of `{filename}`:\n```python\n{current_code}\n```\n\n
-
-Repair `{filename}` so the project passes validation.
-
-Preserve the intended algorithm and public interfaces.
-
-Return the full corrected file content inside a ```python``` block.
-"""
+        "Here is a research paper:\n\n"
+        f"{paper_text}\n\n"
+        "Overall plan:\n"
+        f"{overall_plan}\n\n"
+        "Paper-derived success criteria:\n"
+        f"{success_criteria}\n\n"
+        "Logic design:\n"
+        f"{logic_design}\n\n"
+        f"{prior_section}"
+        "Validation failed with this log and structured report:\n"
+        "```text\n"
+        f"{validation_log}\n"
+        "```\n\n"
+        f"Current content of `{filename}`:\n"
+        "```python\n"
+        f"{current_code}\n"
+        "```\n\n"
+        f"Repair `{filename}` so the project passes validation.\n\n"
+        "Rules:\n"
+        "- Return the complete corrected file, not a patch.\n"
+        "- Preserve the intended algorithm and public interfaces.\n"
+        "- Keep changes focused on the reported failure.\n"
+        "- Do not remove meaningful tests merely to make validation pass.\n"
+        "- Do not add network access, GPU requirements, large datasets, or "
+        "long-running code.\n"
+        "- Production files must not contain pytest tests.\n"
+        "- Test files must remain pytest-compatible.\n"
+        "- Return the complete file inside one ```python``` block."
     )

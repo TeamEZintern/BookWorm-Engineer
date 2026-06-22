@@ -109,7 +109,7 @@ class Agent:
                 tool_choice="auto",
                 extra_body={
                     "reasoning": {
-                        "effort": "low",  # options: "low" | "medium" | "high"
+                        "effort": "medium",  # options: "low" | "medium" | "high"
                     }
                 },
             )
