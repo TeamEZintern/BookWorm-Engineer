@@ -7,16 +7,18 @@ create/rename/delete/select operations. Wires widget signals via ``findChild()``
 and emits ``thread_selected`` when the user picks a thread.
 """
 
+import uuid
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QWidget, QLineEdit, QComboBox, QPushButton, QListWidget,
+    QWidget, QLineEdit, QPushButton, QListWidget,
     QListWidgetItem, QLabel, QMenu, QInputDialog, QMessageBox,
 )
 
 from ..models import Thread
+from ..themes import get_colors
 from ..views.panel.ui_thread_panel import Ui_ThreadPanel
 from ..views.widget.ui_thread_item import Ui_ThreadItem
 
@@ -33,37 +35,130 @@ class ThreadController(QObject):
     """
 
     thread_selected = Signal(object)
+    theme_toggle_requested = Signal()
 
     def __init__(self, config, parent=None):
         super().__init__(parent)
         self.config = config
+        self.colors = get_colors(config.theme)
         self.threads: List[Thread] = []
         self.filtered_threads: List[Thread] = []
-        self.current_sort = "date_modified"  # date_created, date_modified, name
+        self.current_sort = "date_modified"
         self.search_filter = ""
+        self.active_thread_id: Optional[str] = None
 
         self.widget = QWidget()
         self.ui = Ui_ThreadPanel()
         self.ui.setupUi(self.widget)
 
+        self.theme_button = self.widget.findChild(QPushButton, "themeButton")
         self.search_input = self.widget.findChild(QLineEdit, "searchInput")
-        self.sort_combo = self.widget.findChild(QComboBox, "sortCombo")
+        self.sort_button = self.widget.findChild(QPushButton, "sortButton")
         self.new_thread_btn = self.widget.findChild(QPushButton, "newThreadButton")
         self.thread_list = self.widget.findChild(QListWidget, "threadList")
 
+        self.ui.panelLayout.setStretch(2, 1)
+
         self.search_input.textChanged.connect(self.on_search_changed)
-        self.sort_combo.currentIndexChanged.connect(self.on_sort_changed)
+        self.sort_button.clicked.connect(self.on_sort_button_clicked)
         self.new_thread_btn.clicked.connect(self.on_new_thread_clicked)
+        self.theme_button.clicked.connect(self.theme_toggle_requested.emit)
         self.thread_list.itemClicked.connect(self.on_thread_clicked)
         self.thread_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.thread_list.customContextMenuRequested.connect(self.on_context_menu_requested)
 
-        # Timer for search debouncing
         self.search_timer = QTimer()
         self.search_timer.setSingleShot(True)
         self.search_timer.timeout.connect(self.apply_search_filter)
 
+        self._apply_styles()
         self.update_thread_list()
+
+    def _apply_styles(self):
+        c = self.colors
+        self.widget.setStyleSheet(f"background-color: {c['bg_secondary']};")
+        self.theme_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {c['bg_primary']};
+                color: {c['text_primary']};
+                border: 1px solid {c['border']};
+                border-radius: 4px;
+                padding: 8px 12px;
+                font-size: 13px;
+            }}
+            QPushButton:hover {{
+                background-color: {c['bg_tertiary']};
+            }}
+        """)
+        self.theme_button.setText(f"Toggle Theme {self._theme_icon()}")
+        self.sort_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {c['bg_primary']};
+                color: {c['text_primary']};
+                border: 1px solid {c['border']};
+                border-radius: 4px;
+                font-size: 16px;
+                padding: 2px;
+            }}
+            QPushButton:hover {{
+                background-color: {c['bg_tertiary']};
+            }}
+        """)
+        self.new_thread_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {c['bg_primary']};
+                color: {c['accent']};
+                border: 1px solid {c['border']};
+                border-radius: 18px;
+                font-size: 20px;
+                font-weight: bold;
+                padding: 0px;
+            }}
+            QPushButton:hover {{
+                background-color: {c['bg_tertiary']};
+            }}
+        """)
+        self.search_input.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {c['bg_primary']};
+                color: {c['text_primary']};
+                border: 1px solid {c['border']};
+                border-radius: 4px;
+                padding: 6px 8px;
+            }}
+        """)
+        self.thread_list.setStyleSheet(f"""
+            QListWidget {{
+                background-color: {c['bg_secondary']};
+                color: {c['text_primary']};
+                border: none;
+                outline: none;
+            }}
+            QListWidget::item {{
+                background-color: transparent;
+                border: none;
+                border-left: 3px solid transparent;
+                padding: 2px 8px 2px 12px;
+            }}
+            QListWidget::item:selected {{
+                background-color: transparent;
+                color: {c['text_primary']};
+                border-left: 3px solid {c['accent']};
+            }}
+        """)
+
+    def _theme_icon(self) -> str:
+        return "\U0001f383"
+
+    def apply_theme(self, theme_name: str):
+        self.config.theme = theme_name
+        self.colors = get_colors(theme_name)
+        self._apply_styles()
+        self.update_thread_display()
+
+    def set_active_thread_id(self, thread_id: Optional[str]):
+        self.active_thread_id = thread_id
+        self.update_thread_display()
 
     def update_thread_list(self, threads: Optional[List[Thread]] = None):
         """Update the thread list with new threads."""
@@ -82,7 +177,7 @@ class ThreadController(QObject):
             filtered.sort(key=lambda t: t.created_at, reverse=True)
         elif self.current_sort == "date_modified":
             filtered.sort(key=lambda t: t.updated_at, reverse=True)
-        else:  # name
+        else:
             filtered.sort(key=lambda t: t.name.lower())
 
         self.filtered_threads = filtered
@@ -111,19 +206,25 @@ class ThreadController(QObject):
                     f"Modified: {thread.updated_at.strftime('%Y-%m-%d %H:%M')}"
                 )
                 item_widget = self._create_thread_item_widget(thread)
+                item_widget.adjustSize()
                 item.setSizeHint(item_widget.sizeHint())
                 self.thread_list.addItem(item)
                 self.thread_list.setItemWidget(item, item_widget)
+
+                if thread.id == self.active_thread_id:
+                    self.thread_list.setCurrentItem(item)
 
     def _create_thread_item_widget(self, thread: Thread) -> QWidget:
         """Build a thread item widget from ui_thread_item for the list row."""
         widget = QWidget()
         item_ui = Ui_ThreadItem()
         item_ui.setupUi(widget)
-        # Let clicks fall through to the list so itemClicked still fires.
         widget.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         name_label = widget.findChild(QLabel, "nameLabel")
         name_label.setText(thread.name)
+        name_label.setStyleSheet(
+            f"color: {self.colors['text_primary']}; background: transparent;"
+        )
         return widget
 
     def group_threads_by_date(self, threads: List[Thread]) -> Dict[str, List[Thread]]:
@@ -160,6 +261,29 @@ class ThreadController(QObject):
 
         return sorted_groups
 
+    def on_sort_button_clicked(self):
+        """Show sort options menu."""
+        menu = QMenu(self.widget)
+        sort_options = [
+            ("date_modified", "Date Modified"),
+            ("date_created", "Date Created"),
+            ("name", "Name"),
+        ]
+        for sort_key, label in sort_options:
+            action = menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(self.current_sort == sort_key)
+            action.triggered.connect(
+                lambda checked, key=sort_key: self._set_sort(key)
+            )
+        menu.popup(self.sort_button.mapToGlobal(
+            self.sort_button.rect().bottomLeft()
+        ))
+
+    def _set_sort(self, sort_key: str):
+        self.current_sort = sort_key
+        self.apply_sorting_and_filtering()
+
     def on_search_changed(self, text: str):
         """Handle search input changes."""
         self.search_filter = text
@@ -169,16 +293,8 @@ class ThreadController(QObject):
         """Apply the search filter."""
         self.apply_sorting_and_filtering()
 
-    def on_sort_changed(self, index: int):
-        """Handle sort option changes."""
-        sort_options = ["date_modified", "date_created", "name"]
-        if 0 <= index < len(sort_options):
-            self.current_sort = sort_options[index]
-            self.apply_sorting_and_filtering()
-
     def on_new_thread_clicked(self):
         """Handle new thread button click."""
-        import uuid
         new_thread = Thread(
             thread_id=str(uuid.uuid4()),
             name="New Thread",

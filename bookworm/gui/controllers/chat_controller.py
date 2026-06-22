@@ -2,35 +2,30 @@
 Chat Controller
 
 Owns the chat panel view (``ui_chat_panel``) and all chat behaviour: rendering
-message bubbles, markdown formatting, theme styling, the input area, and the
-agent status indicator. Wires widget signals via ``findChild()``.
+user bubbles, agent markdown, copy/redo actions, theme styling, and the input
+area. Wires widget signals via ``findChild()``.
 """
 
+import re
 from typing import List
 
-from PySide6.QtCore import QObject, QTimer
+from PySide6.QtCore import QObject, QTimer, Qt
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QWidget, QLabel, QScrollArea, QFrame, QTextEdit,
-    QPushButton, QVBoxLayout, QSizePolicy,
+    QPushButton, QVBoxLayout, QHBoxLayout, QSizePolicy,
 )
 
 from ..models import Message
 from ..themes import get_colors
 from ..views.panel.ui_chat_panel import Ui_ChatPanel
-from ..views.widget.ui_message_bubble import Ui_MessageBubble
 
 
 class ChatController(QObject):
-    """
-    Controller for the main chat interface.
+    """Controller for the main chat interface."""
 
-    Features:
-    - Message bubbles with markdown rendering
-    - Tool execution blocks
-    - Timestamp display
-    - Message input area
-    - Agent status indicator
-    """
+    INPUT_MIN_HEIGHT = 28
+    INPUT_MAX_HEIGHT = 120
 
     def __init__(self, config, parent=None):
         super().__init__(parent)
@@ -43,7 +38,6 @@ class ChatController(QObject):
         self.ui = Ui_ChatPanel()
         self.ui.setupUi(self.widget)
 
-        self.status_bar = self.widget.findChild(QLabel, "statusBar")
         self.scroll_area = self.widget.findChild(QScrollArea, "scrollArea")
         self.message_container = self.widget.findChild(QWidget, "messageContainer")
         self.message_layout = self.widget.findChild(QVBoxLayout, "messageLayout")
@@ -51,29 +45,37 @@ class ChatController(QObject):
         self.message_input = self.widget.findChild(QTextEdit, "messageInput")
         self.send_button = self.widget.findChild(QPushButton, "sendButton")
 
-        self.message_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.ui.panelLayout.setStretch(0, 1)
+
+        self.message_input.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        self.message_input.document().setDocumentMargin(2)
+        self.ui.inputLayout.setAlignment(
+            self.send_button, Qt.AlignmentFlag.AlignBottom
+        )
         self.message_layout.addStretch()
 
         self._apply_styles()
-
-        self.message_input.textChanged.connect(self.on_input_changed)
+        self._resize_message_input()
+        self.message_input.textChanged.connect(self._resize_message_input)
         self.send_button.clicked.connect(self.on_send_clicked)
 
     def _apply_styles(self):
         """Apply theme-dependent inline styles to the static widgets."""
         c = self.colors
-        self.status_bar.setStyleSheet(
-            f"background-color: {c['bg_tertiary']}; color: {c['text_secondary']}; "
-            f"padding: 5px; border-bottom: 1px solid {c['border']};"
-        )
         self.input_frame.setStyleSheet(
-            f"background-color: {c['bg_secondary']}; color: {c['text_primary']}; "
-            f"border-top: 1px solid {c['border']};"
+            f"background-color: {c['bg_primary']}; border-top: 1px solid {c['border']};"
         )
-        self.message_input.setStyleSheet(
-            f"background-color: {c['bg_secondary']}; color: {c['text_primary']}; "
-            f"border: 1px solid {c['border']}; border-radius: 5px; padding: 5px;"
-        )
+        self.message_input.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {c['bg_secondary']};
+                color: {c['text_primary']};
+                border: 1px solid {c['border']};
+                border-radius: 5px;
+                padding: 8px;
+            }}
+        """)
         self.send_button.setStyleSheet(f"""
             QPushButton {{
                 background-color: {c['accent']};
@@ -92,6 +94,18 @@ class ChatController(QObject):
             }}
         """)
 
+    def _resize_message_input(self):
+        """Grow the input with content, starting from a single-line height."""
+        doc = self.message_input.document()
+        frame = self.message_input.frameWidth() * 2
+        content_height = int(doc.size().height())
+        padding = 18
+        new_height = max(
+            self.INPUT_MIN_HEIGHT,
+            min(content_height + frame + padding, self.INPUT_MAX_HEIGHT),
+        )
+        self.message_input.setFixedHeight(new_height)
+
     def clear_messages(self):
         self.messages.clear()
         while self.message_layout.count() > 0:
@@ -109,66 +123,181 @@ class ChatController(QObject):
 
     def display_message(self, message: Message):
         """Display a single message in the chat."""
-        bubble = QFrame()
-        bubble_ui = Ui_MessageBubble()
-        bubble_ui.setupUi(bubble)
-        bubble.setStyleSheet(self.get_message_style(message.role))
-
-        role_label = bubble.findChild(QLabel, "roleLabel")
-        role_label.setText(message.role.capitalize())
-        role_label.setStyleSheet(
-            f"font-weight: bold; font-size: 12px; color: {self.colors['text_primary']};"
-        )
-
-        timestamp_label = bubble.findChild(QLabel, "timestampLabel")
-        timestamp_label.setText(message.timestamp.strftime("%H:%M"))
-        timestamp_label.setStyleSheet(
-            f"color: {self.colors['text_secondary']}; font-size: 11px;"
-        )
-
-        content_layout = bubble.findChild(QVBoxLayout, "contentLayout")
-        if message.role == "assistant":
-            content_widget = self.create_markdown_widget(message.content, self.colors)
-            content_layout.addWidget(content_widget)
+        if message.role == "user":
+            widget = self._create_user_message_widget(message)
         else:
-            content_label = QLabel(message.content)
-            content_label.setWordWrap(True)
-            content_label.setStyleSheet(
-                f"background-color: transparent; border: none; color: {self.colors['text_primary']};"
-            )
-            content_layout.addWidget(content_label)
+            widget = self._create_assistant_message_widget(message)
+        message.display_widget = widget
+        self.message_layout.insertWidget(self.message_layout.count() - 1, widget)
 
-        self.message_layout.insertWidget(self.message_layout.count() - 1, bubble)
+    def _format_timestamp(self, timestamp) -> str:
+        return timestamp.strftime("%I:%M %p, %d/%m/%Y").lstrip("0").replace(" 0", " ")
+
+    def _create_user_message_widget(self, message: Message) -> QWidget:
+        """User message: right-aligned bubble with timestamp below."""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 8, 0, 8)
+        layout.setSpacing(4)
+
+        row = QHBoxLayout()
+        row.addStretch()
+
+        bubble = QLabel(message.content)
+        bubble.setWordWrap(True)
+        bubble.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        c = self.colors
+        bubble.setStyleSheet(f"""
+            QLabel {{
+                background-color: {c['bubble_user_bg']};
+                color: {c['bubble_user_text']};
+                border: 1px solid {c['bubble_user_border']};
+                border-radius: 12px;
+                padding: 10px 14px;
+            }}
+        """)
+        bubble.setMaximumWidth(int(self.widget.width() * 0.65) if self.widget.width() > 0 else 480)
+        row.addWidget(bubble)
+        layout.addLayout(row)
+
+        timestamp_row = QHBoxLayout()
+        timestamp_row.addStretch()
+        timestamp = QLabel(self._format_timestamp(message.timestamp))
+        timestamp.setStyleSheet(
+            f"color: {c['text_secondary']}; font-size: 11px; background: transparent;"
+        )
+        timestamp_row.addWidget(timestamp)
+        layout.addLayout(timestamp_row)
+
+        return container
+
+    def _create_assistant_message_widget(self, message: Message) -> QWidget:
+        """Agent message: plain markdown with copy/redo buttons below."""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 8, 0, 8)
+        layout.setSpacing(8)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        content = self.create_markdown_widget(message.content, self.colors)
+        layout.addWidget(content)
+
+        actions = QHBoxLayout()
+        actions.setSpacing(8)
+        copy_btn = QPushButton("\U0001f4cb Copy")
+        redo_btn = QPushButton("\u21bb Redo")
+        copy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        redo_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._style_action_button(copy_btn)
+        self._style_action_button(redo_btn)
+        copy_btn.clicked.connect(
+            lambda: self._copy_to_clipboard(message.content)
+        )
+        redo_btn.clicked.connect(
+            lambda: self._redo_assistant_message(message)
+        )
+        actions.addWidget(copy_btn)
+        actions.addWidget(redo_btn)
+        actions.addStretch()
+        layout.addLayout(actions)
+
+        return container
+
+    def _style_action_button(self, button: QPushButton):
+        c = self.colors
+        button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {c['text_secondary']};
+                border: 1px solid {c['border']};
+                border-radius: 4px;
+                padding: 4px 10px;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                background-color: {c['bg_secondary']};
+                color: {c['text_primary']};
+            }}
+            QPushButton:disabled {{
+                color: {c['text_secondary']};
+            }}
+        """)
+
+    def _copy_to_clipboard(self, text: str):
+        clipboard = QGuiApplication.clipboard()
+        clipboard.setText(text)
+
+    def _remove_message(self, message: Message):
+        """Remove a message from the model and its widget from the layout."""
+        widget = getattr(message, "display_widget", None)
+        if message in self.messages:
+            self.messages.remove(message)
+        if widget is not None:
+            self.message_layout.removeWidget(widget)
+            widget.deleteLater()
+            message.display_widget = None
+
+    def _redo_assistant_message(self, message: Message):
+        """Remove the agent response and request a new one from the agent."""
+        if self.is_processing or message.role != "assistant":
+            return
+        if message not in self.messages:
+            return
+
+        self._remove_message(message)
+        self._request_agent_response()
+
+    def _request_agent_response(self):
+        """Ask the agent for a response (simulated until backend is wired)."""
+        self.is_processing = True
+        self.send_button.setEnabled(False)
+        # TODO: Send conversation history to agent and stream response
+        QTimer.singleShot(1000, self.simulate_agent_response)
 
     def create_markdown_widget(self, content: str, colors: dict) -> QWidget:
         """Create a widget for displaying markdown content."""
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
         cp = colors
 
-        # Simple markdown rendering
-        # In a real implementation, you would use a proper markdown renderer
         lines = content.split('\n')
         for line in lines:
             if line.startswith('# '):
-                label = QLabel(f"<h1>{line[2:]}</h1>")
-                label.setStyleSheet(f"font-size: 18px; font-weight: bold; margin: 5px 0; color: {cp['text_primary']};")
+                label = QLabel(f"<b>{line[2:]}</b>")
+                label.setStyleSheet(
+                    f"font-size: 18px; font-weight: bold; margin: 4px 0; "
+                    f"color: {cp['text_primary']}; background: transparent;"
+                )
                 label.setWordWrap(True)
                 layout.addWidget(label)
             elif line.startswith('## '):
-                label = QLabel(f"<h2>{line[3:]}</h2>")
-                label.setStyleSheet(f"font-size: 16px; font-weight: bold; margin: 5px 0; color: {cp['text_primary']};")
+                label = QLabel(f"<b>{line[3:]}</b>")
+                label.setStyleSheet(
+                    f"font-size: 16px; font-weight: bold; margin: 4px 0; "
+                    f"color: {cp['text_primary']}; background: transparent;"
+                )
+                label.setWordWrap(True)
+                layout.addWidget(label)
+            elif re.match(r'^\d+\.\s', line):
+                label = QLabel(line)
+                label.setStyleSheet(
+                    f"margin-left: 8px; margin-bottom: 2px; "
+                    f"color: {cp['text_primary']}; background: transparent;"
+                )
                 label.setWordWrap(True)
                 layout.addWidget(label)
             elif line.startswith('- '):
                 label = QLabel(f"\u2022 {line[2:]}")
-                label.setStyleSheet(f"margin-left: 15px; margin-bottom: 2px; color: {cp['text_primary']};")
+                label.setStyleSheet(
+                    f"margin-left: 15px; margin-bottom: 2px; "
+                    f"color: {cp['text_primary']}; background: transparent;"
+                )
                 label.setWordWrap(True)
                 layout.addWidget(label)
             elif line.startswith('```'):
-                # Code block
-                code_label = QLabel(f"<pre><code>{line[3:]}</code></pre>")
+                code_label = QLabel(f"<pre>{line[3:]}</pre>")
                 code_label.setStyleSheet(f"""
                     background-color: {cp['code_bg']};
                     color: {cp['code_text']};
@@ -177,39 +306,18 @@ class ChatController(QObject):
                     padding: 8px;
                     font-family: monospace;
                     font-size: 12px;
-                    white-space: pre-wrap;
                 """)
                 code_label.setWordWrap(True)
                 layout.addWidget(code_label)
-            else:
-                # Regular text
-                if line.strip():
-                    label = QLabel(line)
-                    label.setStyleSheet(f"color: {cp['text_primary']};")
-                    label.setWordWrap(True)
-                    layout.addWidget(label)
+            elif line.strip():
+                label = QLabel(line)
+                label.setStyleSheet(
+                    f"color: {cp['text_primary']}; background: transparent;"
+                )
+                label.setWordWrap(True)
+                layout.addWidget(label)
 
         return container
-
-    def get_message_style(self, role: str) -> str:
-        """Get CSS style for message bubble based on role."""
-        c = self.colors
-        if role == "user":
-            return f"""
-                background-color: {c['bubble_user_bg']};
-                color: {c['bubble_user_text']};
-                border: 1px solid {c['bubble_user_border']};
-                border-radius: 10px;
-                margin-left: 20%;
-            """
-        else:
-            return f"""
-                background-color: {c['bubble_assist_bg']};
-                color: {c['bubble_assist_text']};
-                border: 1px solid {c['bubble_assist_border']};
-                border-radius: 10px;
-                margin-right: 20%;
-            """
 
     def apply_theme(self, theme_name: str):
         self.colors = get_colors(theme_name)
@@ -225,6 +333,7 @@ class ChatController(QObject):
         self.scroll_area.update()
 
         for msg in saved:
+            msg.display_widget = None
             self.messages.append(msg)
             self.display_message(msg)
 
@@ -232,12 +341,6 @@ class ChatController(QObject):
         """Scroll the chat to the bottom."""
         scrollbar = self.scroll_area.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
-
-    def on_input_changed(self):
-        """Handle input text changes."""
-        document = self.message_input.document()
-        new_height = min(max(30, int(document.size().height())), 100)
-        self.message_input.setFixedHeight(new_height)
 
     def on_send_clicked(self):
         """Handle send button click."""
@@ -250,25 +353,24 @@ class ChatController(QObject):
 
         user_message = Message(role="user", content=content)
         self.add_message(user_message)
-
         self.message_input.clear()
+        self._resize_message_input()
 
-        self.is_processing = True
-        self.status_bar.setText("Processing...")
-        self.send_button.setEnabled(False)
-
-        # TODO: Send message to agent and get response
-        # For now, simulate a response
-        QTimer.singleShot(1000, self.simulate_agent_response)
+        self._request_agent_response()
 
     def simulate_agent_response(self):
         """Simulate an agent response for testing."""
         agent_message = Message(
             role="assistant",
-            content="This is a simulated agent response. In the real implementation, this would be the actual response from the Bookworm agent."
+            content=(
+                "This is a simulated agent response. In the real implementation, "
+                "this would be the actual response from the Bookworm agent.\n\n"
+                "1. First item\n"
+                "2. Second item\n"
+                "3. Third item"
+            )
         )
         self.add_message(agent_message)
 
         self.is_processing = False
-        self.status_bar.setText("Ready")
         self.send_button.setEnabled(True)

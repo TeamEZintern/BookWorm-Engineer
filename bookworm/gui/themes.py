@@ -57,8 +57,9 @@ def build_stylesheet(theme: str = "light") -> str:
             border: none;
         }}
         QListWidget::item:selected {{
-            background-color: {colors["accent"]};
-            color: {colors["accent_text"]};
+            background-color: transparent;
+            color: {colors["text_primary"]};
+            border-left: 3px solid {colors["accent"]};
         }}
         QLineEdit, QTextEdit {{
             background-color: {colors["bg_secondary"]};

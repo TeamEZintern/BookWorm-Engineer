@@ -13,7 +13,7 @@ class GUIConfig:
     # Window settings
     window_width: int = 1200
     window_height: int = 800
-    window_title: str = "BookWorm Engineer - GUI"
+    window_title: str = "BookWorm Engineer"
     
     # Thread panel settings
     thread_panel_width: int = 300
@@ -28,7 +28,7 @@ class GUIConfig:
     timestamp_format: str = "HH:mm"
     
     # Theme settings
-    theme: str = "light"  # light, dark
+    theme: str = "dark"  # light, dark
     
     # Performance settings
     max_threads: int = 100

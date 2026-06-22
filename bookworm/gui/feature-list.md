@@ -273,7 +273,9 @@ bookworm/gui/
 - [x] `.ui` and generated `ui_*.py` sit side-by-side in the same subfolder
 - [x] Both committed to git
 - [x] `.ui` files conform to the Qt Designer UI file format (`qt-designer-schema.xml`)
-- [x] Developers run `pyside6-uic` on `.ui` files via `build_ui.py`
+- [x] Layout source of truth is the `.ui` files — edit them in Qt Designer (or equivalent), not by hand-editing XML
+- [x] After changing any `.ui` file, regenerate the matching `ui_*.py` by running `python -m bookworm.gui.build_ui` (wraps `pyside6-uic`)
+- [x] Do **not** hand-edit `ui_*.py` — they are generated output and will be overwritten on the next build
 - [x] Controller uses `findChild()` to wire up widget signals (no view wrapper layer)
 - [x] View files (.ui + generated) created
 - [x] Controller files created (app, thread, chat)
@@ -282,7 +284,13 @@ bookworm/gui/
 
 ### `.ui` to `.py` conversion (`pyside6-uic`)
 
-Regular conversion is handled by `build_ui.py`, which walks the `views/` directory tree, finds all `.ui` files, and runs `pyside6-uic <file>.ui -o ui_<file>.py` in the same folder.
+Workflow:
+
+1. Edit the `.ui` file in Qt Designer and save.
+2. Run `python -m bookworm.gui.build_ui` from the repo root.
+3. Commit both the updated `.ui` and the regenerated `ui_*.py`.
+
+`build_ui.py` walks the `views/` directory tree, finds all `.ui` files, and runs `pyside6-uic <file>.ui -o ui_<file>.py` in the same folder.
 
 Based on [PySide6 docs](https://doc.qt.io/qtforpython-6/tools/pyside-uic.html):
 
@@ -291,7 +299,7 @@ Based on [PySide6 docs](https://doc.qt.io/qtforpython-6/tools/pyside-uic.html):
 - The `-o` flag writes output to a file (without it, output goes to stdout)
 - Generates a class `Ui_TheNameOfYourDesign(object)` with a `setupUi(widget)` method
 - Usage in code: instantiate the `Ui_*` class and call `setupUi(self)` on a matching Qt widget (e.g. `QWidget`, `QDialog`, `QMainWindow`)
-- Do **not** hand-edit generated files — changes are lost on re-generation
+- Do **not** hand-edit `ui_*.py` — changes are lost on re-generation; put layout changes in the `.ui` file instead
 - Prefer `pyside6-uic` over raw `uic -g python` to avoid version mismatches
 - For a full list of options: `pyside6-uic -h`
 

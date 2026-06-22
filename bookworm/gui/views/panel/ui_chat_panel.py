@@ -3,17 +3,21 @@
 ################################################################################
 ## Form generated from reading UI file 'chat_panel.ui'
 ##
-## Created by: Qt User Interface Compiler version 6.x
+## Created by: Qt User Interface Compiler version 6.11.1
 ##
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
 
-from PySide6.QtCore import QMetaObject, QCoreApplication, Qt, QSize, QRect
-from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea,
-    QTextEdit, QVBoxLayout, QWidget,
-)
-
+from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
+    QMetaObject, QObject, QPoint, QRect,
+    QSize, QTime, QUrl, Qt)
+from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
+    QFont, QFontDatabase, QGradient, QIcon,
+    QImage, QKeySequence, QLinearGradient, QPainter,
+    QPalette, QPixmap, QRadialGradient, QTransform)
+from PySide6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QPushButton,
+    QScrollArea, QSizePolicy, QTextEdit, QVBoxLayout,
+    QWidget)
 
 class Ui_ChatPanel(object):
     def setupUi(self, ChatPanel):
@@ -24,42 +28,38 @@ class Ui_ChatPanel(object):
         self.panelLayout.setSpacing(0)
         self.panelLayout.setObjectName(u"panelLayout")
         self.panelLayout.setContentsMargins(0, 0, 0, 0)
-        self.statusBar = QLabel(ChatPanel)
-        self.statusBar.setObjectName(u"statusBar")
-
-        self.panelLayout.addWidget(self.statusBar)
-
         self.scrollArea = QScrollArea(ChatPanel)
         self.scrollArea.setObjectName(u"scrollArea")
-        self.scrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.scrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.scrollArea.setWidgetResizable(True)
+        self.scrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.messageContainer = QWidget()
         self.messageContainer.setObjectName(u"messageContainer")
         self.messageContainer.setGeometry(QRect(0, 0, 798, 500))
         self.messageLayout = QVBoxLayout(self.messageContainer)
         self.messageLayout.setSpacing(10)
         self.messageLayout.setObjectName(u"messageLayout")
-        self.messageLayout.setContentsMargins(10, 10, 10, 10)
+        self.messageLayout.setContentsMargins(16, 16, 16, 16)
         self.scrollArea.setWidget(self.messageContainer)
 
         self.panelLayout.addWidget(self.scrollArea)
 
         self.inputFrame = QFrame(ChatPanel)
         self.inputFrame.setObjectName(u"inputFrame")
-        self.inputFrame.setFrameShape(QFrame.Shape.StyledPanel)
-        self.inputFrame.setFrameShadow(QFrame.Shadow.Plain)
+        self.inputFrame.setFrameShape(QFrame.NoFrame)
         self.inputLayout = QHBoxLayout(self.inputFrame)
         self.inputLayout.setObjectName(u"inputLayout")
-        self.inputLayout.setContentsMargins(10, 10, 10, 10)
+        self.inputLayout.setContentsMargins(16, 10, 16, 10)
         self.messageInput = QTextEdit(self.inputFrame)
         self.messageInput.setObjectName(u"messageInput")
-        self.messageInput.setMaximumSize(QSize(16777215, 100))
+        self.messageInput.setMinimumSize(QSize(0, 28))
+        self.messageInput.setMaximumSize(QSize(16777215, 120))
 
         self.inputLayout.addWidget(self.messageInput)
 
         self.sendButton = QPushButton(self.inputFrame)
         self.sendButton.setObjectName(u"sendButton")
+        self.sendButton.setMinimumSize(QSize(80, 0))
 
         self.inputLayout.addWidget(self.sendButton)
 
@@ -73,7 +73,8 @@ class Ui_ChatPanel(object):
     # setupUi
 
     def retranslateUi(self, ChatPanel):
-        self.statusBar.setText(QCoreApplication.translate("ChatPanel", u"Ready", None))
         self.messageInput.setPlaceholderText(QCoreApplication.translate("ChatPanel", u"Type a message...", None))
         self.sendButton.setText(QCoreApplication.translate("ChatPanel", u"Send", None))
+        pass
     # retranslateUi
+
