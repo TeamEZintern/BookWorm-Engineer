@@ -5,8 +5,8 @@ todos:
   - id: mode-switch
     content: Mid-session GUI ↔ terminal switching (feature-list line 14)
     status: pending
-  - id: three-dots-menu
-    content: Three-dots button on chat_item with rename/delete menu (line 37)
+  - id: overflow-menu-button
+    content: Overflow menu button (three dots) on chat_item with rename/delete menu (line 37)
     status: pending
   - id: search-filter
     content: Verify or complete search filtering logic (line 44)
@@ -50,10 +50,10 @@ After your edit, every `- [ ]` line in [bookworm/gui/feature-list.md](bookworm/g
 
 ### Chat Operations
 
-**Three-dots button → context menu (rename / delete)** (line 37)
+**Overflow menu button (three dots) → context menu (rename / delete)** (line 37)
 
-- Goal: each chat row gets a visible `⋯` control that opens rename/delete, matching the mockup UX.
-- Current state: rename/delete **do** work via **right-click** context menu in [side_panel_controller.py](bookworm/gui/controllers/side_panel_controller.py) (`show_context_menu`). The gap is the dedicated three-dots **button** on `chat_item.ui`, not the menu logic itself.
+- Goal: each chat row gets a visible overflow menu button (three dots) that opens rename/delete, matching the mockup UX.
+- Current state: rename/delete **do** work via **right-click** context menu in [side_panel_controller.py](bookworm/gui/controllers/side_panel_controller.py) (`show_context_menu`). The gap is the dedicated overflow menu button (three dots) on `chat_item.ui`, not the menu logic itself.
 
 ### Search
 
@@ -111,7 +111,7 @@ flowchart TB
     M1[midSession GUItoTerminal]
   end
   subgraph chats [Side Panel]
-    T1[ThreeDots menu button]
+    T1["Overflow menu button (three dots)"]
     T2[Search filter verify or fix]
   end
   subgraph chat [Agent Messages]
@@ -137,7 +137,7 @@ flowchart TB
 If you want an order that unblocks the most user-visible value:
 
 1. **Draft persistence** — small schema + controller change; improves daily UX immediately
-2. **Three-dots button** — UI-only; reuses existing rename/delete handlers
+2. **Overflow menu button (three dots)** — UI-only; reuses existing rename/delete handlers
 3. **Real markdown + advanced render** — needed before agent backend wiring pays off visually
 4. **Collapsible tool/reasoning sections** — needs real agent streaming/events
 5. **Mid-session mode switch** — architectural; lowest urgency unless explicitly required
