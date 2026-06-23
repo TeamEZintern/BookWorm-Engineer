@@ -35,6 +35,7 @@ Create, rename, delete, and switch between chats
 - [x] Clicking a different chat saves the current conversation and loads the selected one, replacing the main panel content entirely.
 - [x] Create/delete functionality
 - [x] Overflow menu button (three dots) on a chat item shows a context menu to rename or delete it
+- [x] Double-click a chat name or choose Rename from the overflow menu to edit the name inline
 
 ### Search `DOING`
 

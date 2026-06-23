@@ -10,7 +10,7 @@ conversation into the main panel.
 import uuid
 from datetime import datetime
 
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QObject, QTimer
 from PySide6.QtWidgets import QApplication, QMainWindow, QSplitter
 
 from ..config import GUIConfig
@@ -156,6 +156,7 @@ class AppController(QObject):
         self.store.add(chat)
         self.update_side_panel()
         self._select_chat(chat)
+        QTimer.singleShot(0, lambda: self.side_panel_controller.start_inline_rename(chat))
 
     def on_chat_renamed(self, chat: Chat):
         self.store.save(chat)

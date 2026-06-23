@@ -12,9 +12,10 @@ from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal, QSize, QEvent
+from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import (
     QWidget, QFrame, QLineEdit, QPushButton, QListWidget,
-    QListWidgetItem, QLabel, QMenu, QInputDialog, QMessageBox,
+    QListWidgetItem, QLabel, QMenu, QMessageBox,
 )
 
 from ..models import Chat, default_chat_name
@@ -24,7 +25,7 @@ from ..views.widget.ui_chat_item import Ui_ChatItem
 
 
 class _ChatItemClickFilter(QObject):
-    """Select a chat when the row is clicked, except on the overflow menu button."""
+    """Select a chat on click or start inline rename on double-click."""
 
     def __init__(
         self,
@@ -39,20 +40,52 @@ class _ChatItemClickFilter(QObject):
         self._frame = frame
         self._overflow_button = overflow_button
 
+    def _is_overflow_click(self, watched: QObject, event: QEvent) -> bool:
+        pos = event.pos()
+        if watched is not self._frame:
+            pos = self._frame.mapFrom(watched, pos)
+        return self._frame.childAt(pos) is self._overflow_button
+
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.MouseButtonDblClick:
+            if event.button() != Qt.MouseButton.LeftButton:
+                return False
+            if self._is_overflow_click(watched, event):
+                return False
+            self._controller.start_inline_rename(self._chat)
+            return True
+
         if event.type() != QEvent.Type.MouseButtonPress:
             return False
         if event.button() != Qt.MouseButton.LeftButton:
             return False
-
-        pos = event.pos()
-        if watched is not self._frame:
-            pos = self._frame.mapFrom(watched, pos)
-        if self._frame.childAt(pos) is self._overflow_button:
+        if self._is_overflow_click(watched, event):
             return False
 
         self._controller.chat_selected.emit(self._chat)
         return True
+
+
+class _InlineRenameKeyFilter(QObject):
+    """Commit inline rename on Enter, cancel on Escape."""
+
+    def __init__(self, controller: "SidePanelController"):
+        super().__init__()
+        self._controller = controller
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if event.type() != QEvent.Type.KeyPress:
+            return False
+        key_event = event
+        if not isinstance(key_event, QKeyEvent):
+            return False
+        if key_event.key() == Qt.Key.Key_Escape:
+            self._controller.cancel_inline_rename()
+            return True
+        if key_event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self._controller.commit_inline_rename()
+            return True
+        return False
 
 
 class SidePanelController(QObject):
@@ -88,6 +121,10 @@ class SidePanelController(QObject):
         self.current_sort = "date_modified"
         self.search_filter = ""
         self.active_chat_id: Optional[str] = None
+        self._editing_chat: Optional[Chat] = None
+        self._editing_frame: Optional[QFrame] = None
+        self._editing_original_name = ""
+        self._inline_rename_key_filter = _InlineRenameKeyFilter(self)
 
         self.widget = QWidget()
         self.ui = Ui_SidePanel()
@@ -224,6 +261,9 @@ class SidePanelController(QObject):
 
     def update_chat_display(self):
         """Update the chat list widget with filtered chats."""
+        if self._editing_chat is not None:
+            self.commit_inline_rename()
+
         self.chat_list.clear()
 
         grouped_chats = self.group_chats_by_date(self.filtered_chats)
@@ -274,6 +314,13 @@ class SidePanelController(QObject):
                 background: transparent;
                 padding: 0px;
             }}
+            QLineEdit#nameEdit {{
+                color: {c['text_primary']};
+                background-color: {c['bg_primary']};
+                border: 1px solid {c['accent']};
+                border-radius: 2px;
+                padding: 0px 2px;
+            }}
             QPushButton#overflowMenuButton {{
                 background-color: transparent;
                 color: {c['text_secondary']};
@@ -290,6 +337,11 @@ class SidePanelController(QObject):
 
         name_label = frame.findChild(QLabel, "nameLabel")
         name_label.setText(chat.name)
+        name_edit = frame.findChild(QLineEdit, "nameEdit")
+        name_edit.setVisible(False)
+        name_edit.editingFinished.connect(
+            lambda _chat=chat: self._on_inline_rename_editing_finished(_chat)
+        )
 
         overflow_button = frame.findChild(QPushButton, "overflowMenuButton")
         overflow_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -315,7 +367,7 @@ class SidePanelController(QObject):
         menu = QMenu(self.widget)
 
         rename_action = menu.addAction("Rename")
-        rename_action.triggered.connect(lambda: self.rename_chat(chat))
+        rename_action.triggered.connect(lambda: self.start_inline_rename(chat))
 
         delete_action = menu.addAction("Delete")
         delete_action.triggered.connect(lambda: self.delete_chat(chat))
@@ -407,16 +459,92 @@ class SidePanelController(QObject):
             if chat:
                 self.chat_selected.emit(chat)
 
-    def rename_chat(self, chat: Chat):
-        """Rename a chat."""
-        new_name, ok = QInputDialog.getText(
-            self.widget, "Rename Chat", "Enter new chat name:", text=chat.name
-        )
+    def start_inline_rename(self, chat: Chat) -> None:
+        """Replace the chat name label with an inline editor."""
+        if self._editing_chat is not None and self._editing_chat.id != chat.id:
+            self.commit_inline_rename()
 
-        if ok and new_name:
-            chat.name = new_name
-            chat.updated_at = datetime.now()
-            self.chat_renamed.emit(chat)
+        for index in range(self.chat_list.count()):
+            item = self.chat_list.item(index)
+            if item is None or not (item.flags() & Qt.ItemFlag.ItemIsEnabled):
+                continue
+            item_chat = item.data(Qt.ItemDataRole.UserRole)
+            if item_chat and item_chat.id == chat.id:
+                widget = self.chat_list.itemWidget(item)
+                if isinstance(widget, QFrame):
+                    self._begin_inline_rename(chat, widget)
+                return
+
+    def _begin_inline_rename(self, chat: Chat, frame: QFrame) -> None:
+        name_label = frame.findChild(QLabel, "nameLabel")
+        name_edit = frame.findChild(QLineEdit, "nameEdit")
+        if name_label is None or name_edit is None:
+            return
+
+        self._editing_chat = chat
+        self._editing_frame = frame
+        self._editing_original_name = chat.name
+
+        name_edit.setText(chat.name)
+        name_label.hide()
+        name_edit.show()
+        name_edit.setFocus()
+        name_edit.selectAll()
+        name_edit.installEventFilter(self._inline_rename_key_filter)
+
+    def _on_inline_rename_editing_finished(self, chat: Chat) -> None:
+        if self._editing_chat is None or self._editing_chat.id != chat.id:
+            return
+        self.commit_inline_rename()
+
+    def commit_inline_rename(self) -> None:
+        """Save the inline rename and restore the label."""
+        if self._editing_chat is None or self._editing_frame is None:
+            return
+
+        chat = self._editing_chat
+        frame = self._editing_frame
+        name_edit = frame.findChild(QLineEdit, "nameEdit")
+        if name_edit is None:
+            self._clear_inline_rename_state()
+            return
+
+        new_name = name_edit.text().strip()
+        self._finish_inline_rename_ui(frame, name_edit)
+
+        if not new_name or new_name == self._editing_original_name:
+            chat.name = self._editing_original_name
+            return
+
+        chat.name = new_name
+        chat.updated_at = datetime.now()
+        self.chat_renamed.emit(chat)
+
+    def cancel_inline_rename(self) -> None:
+        """Discard inline rename edits and restore the label."""
+        if self._editing_chat is None or self._editing_frame is None:
+            return
+
+        chat = self._editing_chat
+        chat.name = self._editing_original_name
+        frame = self._editing_frame
+        name_edit = frame.findChild(QLineEdit, "nameEdit")
+        if name_edit is not None:
+            self._finish_inline_rename_ui(frame, name_edit)
+
+    def _finish_inline_rename_ui(self, frame: QFrame, name_edit: QLineEdit) -> None:
+        name_label = frame.findChild(QLabel, "nameLabel")
+        name_edit.removeEventFilter(self._inline_rename_key_filter)
+        name_edit.hide()
+        if name_label is not None:
+            name_label.setText(self._editing_chat.name if self._editing_chat else "")
+            name_label.show()
+        self._clear_inline_rename_state()
+
+    def _clear_inline_rename_state(self) -> None:
+        self._editing_chat = None
+        self._editing_frame = None
+        self._editing_original_name = ""
 
     def delete_chat(self, chat: Chat):
         """Delete a chat."""

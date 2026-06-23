@@ -16,7 +16,7 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QLabel,
-    QPushButton, QSizePolicy, QWidget)
+    QLineEdit, QPushButton, QSizePolicy, QWidget)
 
 class Ui_ChatItem(object):
     def setupUi(self, chatItemFrame):
@@ -46,6 +46,15 @@ class Ui_ChatItem(object):
         self.nameLabel.setAlignment(Qt.AlignLeading|Qt.AlignVCenter)
 
         self.itemLayout.addWidget(self.nameLabel)
+
+        self.nameEdit = QLineEdit(chatItemFrame)
+        self.nameEdit.setObjectName(u"nameEdit")
+        sizePolicy1.setHeightForWidth(self.nameEdit.sizePolicy().hasHeightForWidth())
+        self.nameEdit.setSizePolicy(sizePolicy1)
+        self.nameEdit.setVisible(False)
+        self.nameEdit.setFrame(False)
+
+        self.itemLayout.addWidget(self.nameEdit)
 
         self.overflowMenuButton = QPushButton(chatItemFrame)
         self.overflowMenuButton.setObjectName(u"overflowMenuButton")
