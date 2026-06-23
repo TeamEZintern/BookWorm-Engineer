@@ -2,14 +2,22 @@ import json
 import time
 from typing import Any
 
-from openai import OpenAI
+from openai import (
+    OpenAI,
+    APIConnectionError,
+    RateLimitError,
+    InternalServerError,
+)
 
 from .commands import VALID_MODES, CommandResult, handle_command
 from .config import Config
 from .prompts import build_system_prompt
 from .tools import ToolRegistry, call_tool
+from .llm import complete_with_retry
 
 HALLUNCINATION_THRESHOLD = 0.75
+MAX_API_RETRIES = 4
+RETRY_BASE_DELAY = 2.0
 
 
 class Agent:
@@ -86,30 +94,91 @@ class Agent:
             if result == CommandResult.HANDLED:
                 continue
 
+            checkpoint = len(self.messages)
             self.messages.append({"role":"user", "content": user_prompt})
             start_time = time.time()
+
+            # try: 
+            #     response_text = self._run_turn()
+            # except Exception as exc: 
+            #     raise RuntimeError(f"Failed to generate response: {exc}") from exc
+            
+            # print(f"\n{response_text}\n")
 
             try: 
                 response_text = self._run_turn()
             except Exception as exc: 
-                raise RuntimeError(f"Failed to generate response: {exc}") from exc
-            
+                del self.messages[checkpoint:]
+                print(f"\n[error] Could not complete that request: {exc}\n")
+                continue
+
             print(f"\n{response_text}\n")
+
             elapsed = time.time() - start_time
             hours, remainder = divmod(elapsed, 3600)
             minutes, seconds = divmod(remainder, 60)
             print(f"Time taken: {int(hours):02}:{int(minutes):02}:{seconds:05.2f}\n")
 
-    def _run_turn(self) -> str:
-        while True:
-            response = self.client.chat.completions.create(
+    def _create_completion(self):
+        """
+        Call the LLM, retrying transient failures with exponential backoff
+
+        On overload a provider/gateway can return a non-JSON body (an exmpty or HTML page, or an SSE stream).
+        The SDK then throws json.JSONDecodeError while parsing the reponse - note that's a *raw* json error, not an
+        openai error type, so it escapes unless caught explicitly. Treat taht, plus connection/ rate-limit / 5xx errors,
+        as retryable. Real 4xx client errors are deliebrately NOT caught - retrying cant fix them, and hiding them would just 
+        delay the real diagnosis
+        """
+        last_exc: Exception | None = None
+        for attempt in range(1, MAX_API_RETRIES + 1):
+            try: 
+                response = self.client.chat.completions.create(
                 model=self.config.llm_model,
                 messages=self.messages,
                 tools=self.tool_registry.schema,
                 tool_choice="auto",
                 extra_body={
                     "reasoning": {
-                        "effort": "medium",  # options: "low" | "medium" | "high"
+                        "effort": "low",  # options: "low" | "medium" | "high"
+                    }
+                },
+            )
+            except (
+                APIConnectionError,
+                RateLimitError,
+                InternalServerError,
+                json.JSONDecodeError,
+            ) as exc: 
+                last_exc = exc
+                if attempt == MAX_API_RETRIES:
+                    break
+                delay = RETRY_BASE_DELAY * 2 ** (attempt - 1)
+                print(
+                    f"  ! LLM request failed ({type(exc).__name__}); "
+                    f"retrying in {delay:.0f}s "
+                    f"(attempt {attempt}/{MAX_API_RETRIES})..."
+                )
+                time.sleep(delay)
+
+                raise RuntimeError(
+                    f"LLM request failed after {MAX_API_RETRIES} attemps: {last_exc}"
+                ) from last_exc
+            
+            return response
+            
+        
+
+    def _run_turn(self) -> str:
+        while True:
+            response = complete_with_retry(
+                client=self.client,
+                model=self.config.llm_model,
+                messages=self.messages,
+                tools=self.tool_registry.schema,
+                tool_choice="auto",
+                extra_body={
+                    "reasoning": {
+                        "effort": "low",  # options: "low" | "medium" | "high"
                     }
                 },
             )

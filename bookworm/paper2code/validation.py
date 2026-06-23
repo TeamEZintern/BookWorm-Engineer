@@ -43,7 +43,7 @@ def _run(command: list[str], cwd: Path, timeout: int = 200) -> tuple[bool, str, 
     """
     try:
         result = subprocess.run(
-            command=command,
+            command,
             cwd=cwd,
             capture_output=True,
             text=True,
@@ -289,7 +289,7 @@ def _run_ruff_autofix(output_dir: Path) -> CheckResult:
     --exit-zero is intentional because this pahse is not the final lint gate
     Remaining issues are checked by _run_ruff_check_json().
     """
-    command = [sys.executable, "-m", "ruff", "check", ".", "--fix", "--exit-zero"]
+    command = [sys.executable, "-m", "ruff", "check", ".", "--fix", "--unsafe-fixes", "--exit-zero"]
     ok, log, _stdout, _stderr = _run(command, output_dir)
 
     return CheckResult(
@@ -452,10 +452,6 @@ def _run_validation(output_dir: Path) -> ValidationResult:
     ruff_result = _run_ruff_check_json(output_dir)
     checks.append(ruff_result)
 
-    if not ruff_result.ok:
-        checks.append(_skipped_check("pytest", "Skipped because ruff failed."))
-        return _build_validation_result(checks)
-    
     pytest_result = _run_pytest_check(output_dir)
     checks.append(pytest_result)
 

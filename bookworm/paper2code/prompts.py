@@ -36,6 +36,8 @@ TRIAGE_SYSTEM = (
 REPAIR_SYSTEM = (
     "You are an expert software engineer repairing generated research code. "
     "Return only the complete corrected file content inside a ```python``` block."
+    "Do not introduce new lint errors or unused varables; use raw strings (r\"...\") for any regex"
+    "Do not break tests that currently pass."
 )
 
 

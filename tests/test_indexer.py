@@ -141,7 +141,7 @@ def test_build_index_splits_long_documents_into_multiple_chunks(monkeypatch, tmp
     monkeypatch.setattr(indexer, "Chroma", FakeChroma)
     monkeypatch.setattr(indexer, "create_embeddings", lambda received: fake_embeddings)
 
-    result = indexer.build_index(config)
+    indexer.build_index(config)
 
     chroma_call = FakeChroma.calls[0]
 

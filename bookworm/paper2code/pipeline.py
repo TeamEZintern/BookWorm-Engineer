@@ -8,11 +8,13 @@ from ..config import Config
 from . import artifacts, prompts
 from .pdf import extract_text
 from .validation import _load_validated_or_initial_code,_run_validation,ValidationResult
+from ..llm import complete_with_retry
 
-MAX_VALIDATION_ATTEMPTS = 3
+MAX_VALIDATION_ATTEMPTS = 6
 
 def _llm(client: OpenAI, config: Config, system: str, user: str) -> str:
-    response = client.chat.completions.create(
+    response = complete_with_retry(
+        client=client,
         model=config.llm_model,
         messages=[
             {"role": "system", "content": system},
@@ -494,8 +496,7 @@ def run_pipeline(
             return (
                 "Paper-to-code generation stopped because required dependencies "
                 "are unavailable.\n"
-                f"Required packages: {', '.join(logic.get('packages', [])) or
-                'unknown'}\n"
+                f"Required packages: {', '.join(logic.get('packages', [])) or 'unknown'}\n"
                 f"Reasons: {'; '.join(reasons)}\n"
                 f"Artifacts saved to: {artifacts_dir}"
             )

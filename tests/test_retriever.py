@@ -1,4 +1,3 @@
-from pathlib import Path
 from types import SimpleNamespace
 
 from langchain_core.documents import Document
