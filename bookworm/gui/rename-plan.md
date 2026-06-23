@@ -96,7 +96,7 @@ chats_dir = config.working_dir / ".bookworm" / "chats"
 | `.bookworm/threads/<uuid>.json` | `.bookworm/chats/<uuid>.json` |
 
 - Filename pattern stays `{id}.json` — only the parent directory changes.
-- JSON **keys are unchanged** in this migration: `id`, `name`, `created_at`, `updated_at`, `messages` (and future `user-input`).
+- JSON keys after the draft persistence feature: `id`, `name`, `created_at`, `updated_at`, `draft`, `messages`.
 
 ### 2.3 Repo-local sample data
 
@@ -302,7 +302,6 @@ These files are **not renamed** but must be edited after the migration:
 - Renaming `AppController` or `main_window.ui`.
 - CLI subcommands (`bookworm gui`, `bookworm terminal`).
 - Backend agent / LLM code outside `bookworm/gui/`.
-- Adding the planned `user-input` JSON field (separate feature).
 
 ---
 

@@ -115,6 +115,7 @@ Each chat is stored as a JSON file on disk inside `.bookworm/chats/`:
   "name": "Design GUI",
   "created_at": "2026-06-17T10:30:00Z",
   "updated_at": "2026-06-17T11:15:00Z",
+  "draft": "",
   "messages": [
     {
       "role": "user",
@@ -137,4 +138,4 @@ Each chat is stored as a JSON file on disk inside `.bookworm/chats/`:
 - New chats default name to "New Chat" with a unique slug for the filename.
 - Delete moves the chat file to a trash location or marks it deleted; hard delete is a separate action.
 - The active chat is visually highlighted in the side panel.
-- Unsaved draft text is stored in memory per chat and discarded on app close (no draft persistence).
+- Unsaved draft text is stored in each chat JSON file as `draft` and restored when switching chats or reopening the GUI.

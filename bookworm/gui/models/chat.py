@@ -7,6 +7,7 @@ Represents a chat and its message history.
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 
+DRAFT_KEY = "draft"
 REQUIRED_CHAT_KEYS = {"id", "name", "created_at", "updated_at", "messages"}
 REQUIRED_MESSAGE_KEYS = {"role", "content", "timestamp"}
 VALID_ROLES = {"user", "assistant", "system"}
@@ -58,6 +59,8 @@ def validate_chat_data(data: Any) -> None:
         raise ValueError("chat updated_at must be a string")
     if not isinstance(data["messages"], list):
         raise ValueError("chat messages must be a list")
+    if DRAFT_KEY in data and not isinstance(data[DRAFT_KEY], str):
+        raise ValueError("chat draft must be a string")
     for message in data["messages"]:
         validate_message_data(message)
 
@@ -66,12 +69,14 @@ class Chat:
     """Represents a chat."""
 
     def __init__(self, chat_id: str, name: str, created_at: datetime,
-                 updated_at: datetime, messages: Optional[List[Dict[str, Any]]] = None):
+                 updated_at: datetime, messages: Optional[List[Dict[str, Any]]] = None,
+                 draft: str = ""):
         self.id = chat_id
         self.name = name
         self.created_at = created_at
         self.updated_at = updated_at
         self.messages = messages or []
+        self.draft = draft
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert chat to dictionary for serialization."""
@@ -81,6 +86,7 @@ class Chat:
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "messages": self.messages,
+            DRAFT_KEY: self.draft,
         }
 
     @classmethod
@@ -93,4 +99,5 @@ class Chat:
             created_at=datetime.fromisoformat(data["created_at"]),
             updated_at=datetime.fromisoformat(data["updated_at"]),
             messages=data.get("messages", []),
+            draft=data.get(DRAFT_KEY, ""),
         )

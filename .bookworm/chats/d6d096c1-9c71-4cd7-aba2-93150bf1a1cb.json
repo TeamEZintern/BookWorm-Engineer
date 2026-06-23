@@ -3,6 +3,7 @@
   "name": "New Chat",
   "created_at": "2026-06-22T15:16:03.493108",
   "updated_at": "2026-06-22T15:16:03.493108",
+  "draft": "",
   "messages": [
     {
       "role": "assistant",

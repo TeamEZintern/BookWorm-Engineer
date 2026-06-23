@@ -58,6 +58,7 @@ class AppController(QObject):
         self.side_panel_controller.chat_deleted.connect(self.on_chat_deleted)
         self.side_panel_controller.theme_toggle_requested.connect(self.on_theme_toggle)
         self.main_panel_controller.messages_changed.connect(self._on_messages_changed)
+        self.main_panel_controller.draft_changed.connect(self._on_draft_changed)
 
         self.splitter.addWidget(self.side_panel_controller.widget)
         self.splitter.addWidget(self.main_panel_controller.widget)
@@ -121,6 +122,7 @@ class AppController(QObject):
         if chat is None:
             return
         chat.messages = self.main_panel_controller.get_message_dicts()
+        chat.draft = self.main_panel_controller.get_draft()
         chat.updated_at = datetime.now()
         self.store.save(chat)
 
@@ -133,10 +135,14 @@ class AppController(QObject):
             self.main_panel_controller.clear_messages()
             for message_data in chat.messages:
                 self.main_panel_controller.add_message(Message.from_dict(message_data))
+            self.main_panel_controller.set_draft(chat.draft)
         finally:
             self._loading_conversation = False
 
     def _on_messages_changed(self) -> None:
+        self._save_current_chat()
+
+    def _on_draft_changed(self) -> None:
         self._save_current_chat()
 
     def on_chat_selected(self, chat: Chat):

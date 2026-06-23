@@ -84,25 +84,25 @@ Agent responses rendered as formatted markdown
 
 ---
 
-## Data Management `DOING`
+## Data Management `DONE`
 
 Backend data structures and storage for GUI functionality
 
-### Chat Storage `DOING`
+### Chat Storage `DONE`
 
 JSON files stored in `.bookworm/chats/` directory, which is initialized in user's repository, not in the BookWorm-Engineer repository.
 
 - [x] File path structure defined (`<chat_id>.json`)
 - [x] Persistence layer implemented in `ChatStore`
-- [ ] Structured JSON schema
+- [x] Structured JSON schema
   - [x] id
   - [x] name
   - [x] timestamps
   - [x] messages
-  - [ ] user-input
-    - [ ] Text typed into the user-input field is stored as part of a chat's memory
-    - [ ] When user switches between chats, the drafted message of the previous chat is saved in the JSON, and the drafted message of the next chat is loaded into the user-input field.
-    - [ ] Empty string in the case of there being no text in the user-input field yet.
+  - [x] draft
+    - [x] Text typed into the message input field is stored as part of a chat's memory
+    - [x] When user switches between chats, the drafted message of the previous chat is saved in the JSON, and the drafted message of the next chat is loaded into the message input field.
+    - [x] Empty string in the case of there being no text in the message input field yet.
 
 ---
 

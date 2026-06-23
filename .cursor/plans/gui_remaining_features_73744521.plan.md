@@ -21,11 +21,11 @@ todos:
     content: Collapsible tool execution / reasoning sections (line 80)
     status: pending
   - id: draft-input-schema
-    content: Add user-input field to chat JSON schema and Chat model (lines 97, 102–105)
-    status: pending
+    content: Add draft field to chat JSON schema and Chat model (lines 97, 102–105)
+    status: completed
   - id: draft-input-switch
     content: Save/load draft text when switching chats; default empty string (lines 103–105)
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -87,11 +87,11 @@ Three related rendering gaps under **Agent Message `DOING`**:
 
 ## 4. Data Management — Chat Storage
 
-Parent item **Structured JSON schema** (line 97) stays unchecked because one sub-field is missing:
+Parent item **Structured JSON schema** (line 97) is now checked because `draft` persistence is implemented:
 
-### **`user-input` draft field** (lines 102–105)
+### **`draft` field** (lines 102–105)
 
-Extend each chat JSON file under `.bookworm/chats/` with a draft input field:
+Each chat JSON file under `.bookworm/chats/` now includes a draft input field:
 
 | Sub-item | Behavior |
 |---|---|
@@ -99,7 +99,7 @@ Extend each chat JSON file under `.bookworm/chats/` with a draft input field:
 | Restore on chat switch (line 104) | Switching chats saves the current draft to the previous chat’s JSON and loads the next chat’s draft into the input field |
 | Empty default (line 105) | Use `""` when no draft exists yet |
 
-- Current state: [chat.py](bookworm/gui/models/chat.py) schema requires `id`, `name`, `created_at`, `updated_at`, `messages` only — no `user-input` key. [design.md](bookworm/gui/design.md) still says drafts are in-memory only and discarded on close, which conflicts with this new spec.
+- Current state: [chat.py](bookworm/gui/models/chat.py) serializes `draft`, defaults missing values to `""`, and the GUI saves/restores draft text when switching chats.
 
 ---
 
@@ -120,7 +120,7 @@ flowchart TB
     C3[Collapsible tool or reasoning blocks]
   end
   subgraph data [Chat JSON]
-    D1[user-input draft field]
+    D1[draft field]
     D2[Save restore on switch]
   end
   C1 --> C2
@@ -128,7 +128,7 @@ flowchart TB
   D1 --> D2
 ```
 
-**Count:** 4 top-level unchecked bullets + 3 nested `user-input` bullets = **7 distinct feature areas** (search may be verify-and-tick only).
+**Count:** 4 top-level unchecked bullets + 3 nested `draft` bullets = **7 distinct feature areas** (search may be verify-and-tick only).
 
 ---
 
@@ -136,7 +136,7 @@ flowchart TB
 
 If you want an order that unblocks the most user-visible value:
 
-1. **Draft `user-input` persistence** — small schema + controller change; improves daily UX immediately
+1. **Draft persistence** — small schema + controller change; improves daily UX immediately
 2. **Three-dots button** — UI-only; reuses existing rename/delete handlers
 3. **Real markdown + advanced render** — needed before agent backend wiring pays off visually
 4. **Collapsible tool/reasoning sections** — needs real agent streaming/events

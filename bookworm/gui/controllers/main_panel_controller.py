@@ -25,6 +25,7 @@ class MainPanelController(QObject):
     """Controller for the main panel chat interface."""
 
     messages_changed = Signal()
+    draft_changed = Signal()
 
     INPUT_MAX_HEIGHT = 120
     INPUT_STYLE_PADDING = 8
@@ -60,7 +61,7 @@ class MainPanelController(QObject):
 
         self._apply_styles()
         self._resize_message_input()
-        self.message_input.textChanged.connect(self._resize_message_input)
+        self.message_input.textChanged.connect(self._on_message_input_changed)
         self.send_button.clicked.connect(self.on_send_clicked)
 
     def _apply_styles(self):
@@ -140,6 +141,19 @@ class MainPanelController(QObject):
                 Qt.ScrollBarPolicy.ScrollBarAlwaysOff
             )
         self.message_input.setFixedHeight(new_height)
+
+    def _on_message_input_changed(self):
+        self._resize_message_input()
+        self.draft_changed.emit()
+
+    def get_draft(self) -> str:
+        """Return the current unsent draft text in the message input."""
+        return self.message_input.toPlainText()
+
+    def set_draft(self, text: str) -> None:
+        """Restore unsent draft text into the message input."""
+        self.message_input.setPlainText(text)
+        self._resize_message_input()
 
     def clear_messages(self):
         self.messages.clear()
