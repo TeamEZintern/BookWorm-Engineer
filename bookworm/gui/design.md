@@ -38,7 +38,7 @@ Lists all saved chats. Each chat shows:
 
 - **Chat name** (editable via rename)
 - **Date created** or **date last modified** (depending on sort)
-- **Context menu** (right-click): Rename, Delete
+- **Overflow menu button (three dots)**: Rename, Delete
 
 #### Chat grouping and display
 
@@ -54,8 +54,8 @@ When sorted by **Name**, chats are displayed alphabetically without date groupin
 | Action | Behaviour |
 |---|---|
 | **Create** | Click `+ New Chat`. A new empty chat appears with a default name (e.g. "New Chat"). The name is immediately editable. |
-| **Rename** | Double-click the chat name or use right-click → Rename. Inline editing replaces the label. |
-| **Delete** | Right-click → Delete. A confirmation dialog appears before removal. |
+| **Rename** | Double-click the chat name or overflow menu button (three dots) → Rename. Inline editing replaces the label. |
+| **Delete** | Overflow menu button (three dots) → Delete. A confirmation dialog appears before removal. |
 | **Switch** | Single-click a chat to load its conversation into the main panel. |
 
 #### Sorting

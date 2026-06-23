@@ -11,7 +11,7 @@ import uuid
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 
-from PySide6.QtCore import QObject, Qt, QTimer, Signal, QSize
+from PySide6.QtCore import QObject, Qt, QTimer, Signal, QSize, QEvent
 from PySide6.QtWidgets import (
     QWidget, QFrame, QLineEdit, QPushButton, QListWidget,
     QListWidgetItem, QLabel, QMenu, QInputDialog, QMessageBox,
@@ -21,6 +21,38 @@ from ..models import Chat, default_chat_name
 from ..themes import get_colors
 from ..views.panel.ui_side_panel import Ui_SidePanel
 from ..views.widget.ui_chat_item import Ui_ChatItem
+
+
+class _ChatItemClickFilter(QObject):
+    """Select a chat when the row is clicked, except on the overflow menu button."""
+
+    def __init__(
+        self,
+        controller: "SidePanelController",
+        chat: Chat,
+        frame: QFrame,
+        overflow_button: QPushButton,
+    ):
+        super().__init__(frame)
+        self._controller = controller
+        self._chat = chat
+        self._frame = frame
+        self._overflow_button = overflow_button
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if event.type() != QEvent.Type.MouseButtonPress:
+            return False
+        if event.button() != Qt.MouseButton.LeftButton:
+            return False
+
+        pos = event.pos()
+        if watched is not self._frame:
+            pos = self._frame.mapFrom(watched, pos)
+        if self._frame.childAt(pos) is self._overflow_button:
+            return False
+
+        self._controller.chat_selected.emit(self._chat)
+        return True
 
 
 class SidePanelController(QObject):
@@ -74,8 +106,6 @@ class SidePanelController(QObject):
         self.new_chat_btn.clicked.connect(self.on_new_chat_clicked)
         self.theme_button.clicked.connect(self.theme_toggle_requested.emit)
         self.chat_list.itemClicked.connect(self.on_chat_clicked)
-        self.chat_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.chat_list.customContextMenuRequested.connect(self.on_context_menu_requested)
 
         self.search_timer = QTimer()
         self.search_timer.setSingleShot(True)
@@ -229,7 +259,6 @@ class SidePanelController(QObject):
         item_ui = Ui_ChatItem()
         item_ui.setupUi(frame)
         frame.setFixedHeight(self.CHAT_ITEM_HEIGHT)
-        frame.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
 
         is_active = chat.id == self.active_chat_id
         c = self.colors
@@ -245,11 +274,53 @@ class SidePanelController(QObject):
                 background: transparent;
                 padding: 0px;
             }}
+            QPushButton#overflowMenuButton {{
+                background-color: transparent;
+                color: {c['text_secondary']};
+                border: none;
+                border-radius: 4px;
+                padding: 0px;
+                font-size: 16px;
+            }}
+            QPushButton#overflowMenuButton:hover {{
+                background-color: {c['bg_tertiary']};
+                color: {c['text_primary']};
+            }}
         """)
 
         name_label = frame.findChild(QLabel, "nameLabel")
         name_label.setText(chat.name)
+
+        overflow_button = frame.findChild(QPushButton, "overflowMenuButton")
+        overflow_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        overflow_button.clicked.connect(
+            lambda _checked=False, c=chat, btn=overflow_button: (
+                self._on_overflow_menu_clicked(c, btn)
+            )
+        )
+
+        click_filter = _ChatItemClickFilter(self, chat, frame, overflow_button)
+        frame.installEventFilter(click_filter)
+        name_label.installEventFilter(click_filter)
+
         return frame
+
+    def _on_overflow_menu_clicked(self, chat: Chat, button: QPushButton) -> None:
+        """Show rename/delete actions from the overflow menu button."""
+        menu = self._build_chat_actions_menu(chat)
+        menu.popup(button.mapToGlobal(button.rect().bottomLeft()))
+
+    def _build_chat_actions_menu(self, chat: Chat) -> QMenu:
+        """Build the rename/delete menu for a chat."""
+        menu = QMenu(self.widget)
+
+        rename_action = menu.addAction("Rename")
+        rename_action.triggered.connect(lambda: self.rename_chat(chat))
+
+        delete_action = menu.addAction("Delete")
+        delete_action.triggered.connect(lambda: self.delete_chat(chat))
+
+        return menu
 
     def group_chats_by_date(self, chats: List[Chat]) -> Dict[str, List[Chat]]:
         """Group chats by date for display."""
@@ -335,26 +406,6 @@ class SidePanelController(QObject):
             chat = item.data(Qt.ItemDataRole.UserRole)
             if chat:
                 self.chat_selected.emit(chat)
-
-    def on_context_menu_requested(self, position):
-        """Show context menu for chat operations."""
-        item = self.chat_list.itemAt(position)
-        if item and item.flags() & Qt.ItemFlag.ItemIsEnabled:
-            chat = item.data(Qt.ItemDataRole.UserRole)
-            if chat:
-                self.show_context_menu(position, chat)
-
-    def show_context_menu(self, position, chat: Chat):
-        """Show context menu for chat operations."""
-        menu = QMenu(self.widget)
-
-        rename_action = menu.addAction("Rename")
-        rename_action.triggered.connect(lambda: self.rename_chat(chat))
-
-        delete_action = menu.addAction("Delete")
-        delete_action.triggered.connect(lambda: self.delete_chat(chat))
-
-        menu.popup(self.chat_list.mapToGlobal(position))
 
     def rename_chat(self, chat: Chat):
         """Rename a chat."""

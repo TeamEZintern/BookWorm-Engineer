@@ -7,7 +7,7 @@ todos:
     status: pending
   - id: overflow-menu-button
     content: Overflow menu button (three dots) on chat_item with rename/delete menu (line 37)
-    status: pending
+    status: completed
   - id: search-filter
     content: Verify or complete search filtering logic (line 44)
     status: pending
@@ -53,7 +53,7 @@ After your edit, every `- [ ]` line in [bookworm/gui/feature-list.md](bookworm/g
 **Overflow menu button (three dots) → context menu (rename / delete)** (line 37)
 
 - Goal: each chat row gets a visible overflow menu button (three dots) that opens rename/delete, matching the mockup UX.
-- Current state: rename/delete **do** work via **right-click** context menu in [side_panel_controller.py](bookworm/gui/controllers/side_panel_controller.py) (`show_context_menu`). The gap is the dedicated overflow menu button (three dots) on `chat_item.ui`, not the menu logic itself.
+- Current state: [side_panel_controller.py](bookworm/gui/controllers/side_panel_controller.py) shows rename/delete from the overflow menu button on `chat_item.ui`.
 
 ### Search
 

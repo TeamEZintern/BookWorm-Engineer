@@ -21,7 +21,7 @@ Side panel displaying list of saved chats with chat names
 
 ### Chat Display `DOING`
 
-Shows chat name, creation/modified date, context menu
+Shows chat name, creation/modified date, overflow menu button
 
 - [x] UI components
 - [x] Date grouping
@@ -34,7 +34,7 @@ Create, rename, delete, and switch between chats
 - [x] If a chat's converstaion is already opened in the main panel, clicking on it in the side panel does nothing
 - [x] Clicking a different chat saves the current conversation and loads the selected one, replacing the main panel content entirely.
 - [x] Create/delete functionality
-- [ ] Overflow menu button (three dots) on a chat item shows a context menu to rename or delete it
+- [x] Overflow menu button (three dots) on a chat item shows a context menu to rename or delete it
 
 ### Search `DOING`
 
