@@ -1,23 +1,23 @@
 """
 BookWorm GUI Models
 
-Data models for the GUI layer: threads, messages, and the in-memory store.
+Data models for the GUI layer: chats, messages, and the in-memory store.
 """
 
 from .message import Message
-from .thread import (
-    Thread,
-    default_thread_name,
+from .chat import (
+    Chat,
+    default_chat_name,
     validate_message_data,
-    validate_thread_data,
+    validate_chat_data,
 )
-from .thread_store import ThreadStore
+from .chat_store import ChatStore
 
 __all__ = [
     "Message",
-    "Thread",
-    "ThreadStore",
-    "default_thread_name",
-    "validate_thread_data",
+    "Chat",
+    "ChatStore",
+    "default_chat_name",
+    "validate_chat_data",
     "validate_message_data",
 ]

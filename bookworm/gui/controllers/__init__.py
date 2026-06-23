@@ -6,11 +6,11 @@ hold the GUI behaviour previously embedded in the monolithic panel classes.
 """
 
 from .app_controller import AppController
-from .chat_controller import ChatController
-from .thread_controller import ThreadController
+from .main_panel_controller import MainPanelController
+from .side_panel_controller import SidePanelController
 
 __all__ = [
     "AppController",
-    "ChatController",
-    "ThreadController",
+    "MainPanelController",
+    "SidePanelController",
 ]

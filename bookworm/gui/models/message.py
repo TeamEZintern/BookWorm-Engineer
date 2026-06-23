@@ -1,7 +1,7 @@
 """
 Message Model
 
-Represents a single message within a conversation thread.
+Represents a single message within a chat.
 """
 
 from typing import List, Dict, Any, Optional

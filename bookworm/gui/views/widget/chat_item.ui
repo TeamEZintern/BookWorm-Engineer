@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>ThreadItem</class>
- <widget class="QFrame" name="threadItemFrame">
+ <class>ChatItem</class>
+ <widget class="QFrame" name="chatItemFrame">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -53,7 +53,7 @@
    <item>
     <widget class="QLabel" name="nameLabel">
      <property name="text">
-      <string>Thread name</string>
+      <string>Chat name</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignLeading|Qt::AlignVCenter</set>

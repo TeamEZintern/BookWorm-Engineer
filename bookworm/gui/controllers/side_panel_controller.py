@@ -1,10 +1,10 @@
 """
-Thread Controller
+Side Panel Controller
 
-Owns the thread panel view (``ui_thread_panel``) and the thread item widget
-(``ui_thread_item``). Handles searching, sorting, date grouping, and thread
+Owns the side panel view (``ui_side_panel``) and the chat item widget
+(``ui_chat_item``). Handles searching, sorting, date grouping, and chat
 create/rename/delete/select operations. Wires widget signals via ``findChild()``
-and emits ``thread_selected`` when the user picks a thread.
+and emits ``chat_selected`` when the user picks a chat.
 """
 
 import uuid
@@ -17,72 +17,72 @@ from PySide6.QtWidgets import (
     QListWidgetItem, QLabel, QMenu, QInputDialog, QMessageBox,
 )
 
-from ..models import Thread, default_thread_name
+from ..models import Chat, default_chat_name
 from ..themes import get_colors
-from ..views.panel.ui_thread_panel import Ui_ThreadPanel
-from ..views.widget.ui_thread_item import Ui_ThreadItem
+from ..views.panel.ui_side_panel import Ui_SidePanel
+from ..views.widget.ui_chat_item import Ui_ChatItem
 
 
-class ThreadController(QObject):
+class SidePanelController(QObject):
     """
-    Controller for the conversation threads panel.
+    Controller for the side panel.
 
     Features:
-    - Create, rename, delete, and switch threads
+    - Create, rename, delete, and switch chats
     - Search functionality
     - Sorting by name, date created, or date modified
     - Date grouping for chronological view
 
-    Thread row layout lives in ``views/widget/thread_item.ui`` (one template per
-    row). ``thread_panel.ui`` only holds the empty ``QListWidget``; names are
-    filled at runtime from ``Thread`` data.
+    Chat row layout lives in ``views/widget/chat_item.ui`` (one template per
+    row). ``side_panel.ui`` only holds the empty ``QListWidget``; names are
+    filled at runtime from ``Chat`` data.
     """
 
-    THREAD_ITEM_HEIGHT = 28
-    THREAD_ITEM_SPACING = 2
+    CHAT_ITEM_HEIGHT = 28
+    CHAT_ITEM_SPACING = 2
 
-    thread_selected = Signal(object)
-    thread_created = Signal(object)
-    thread_renamed = Signal(object)
-    thread_deleted = Signal(object)
+    chat_selected = Signal(object)
+    chat_created = Signal(object)
+    chat_renamed = Signal(object)
+    chat_deleted = Signal(object)
     theme_toggle_requested = Signal()
 
     def __init__(self, config, parent=None):
         super().__init__(parent)
         self.config = config
         self.colors = get_colors(config.theme)
-        self.threads: List[Thread] = []
-        self.filtered_threads: List[Thread] = []
+        self.chats: List[Chat] = []
+        self.filtered_chats: List[Chat] = []
         self.current_sort = "date_modified"
         self.search_filter = ""
-        self.active_thread_id: Optional[str] = None
+        self.active_chat_id: Optional[str] = None
 
         self.widget = QWidget()
-        self.ui = Ui_ThreadPanel()
+        self.ui = Ui_SidePanel()
         self.ui.setupUi(self.widget)
 
         self.theme_button = self.widget.findChild(QPushButton, "themeButton")
         self.search_input = self.widget.findChild(QLineEdit, "searchInput")
         self.sort_button = self.widget.findChild(QPushButton, "sortButton")
-        self.new_thread_btn = self.widget.findChild(QPushButton, "newThreadButton")
-        self.thread_list = self.widget.findChild(QListWidget, "threadList")
+        self.new_chat_btn = self.widget.findChild(QPushButton, "newChatButton")
+        self.chat_list = self.widget.findChild(QListWidget, "chatList")
 
         self.ui.panelLayout.setStretch(2, 1)
 
         self.search_input.textChanged.connect(self.on_search_changed)
         self.sort_button.clicked.connect(self.on_sort_button_clicked)
-        self.new_thread_btn.clicked.connect(self.on_new_thread_clicked)
+        self.new_chat_btn.clicked.connect(self.on_new_chat_clicked)
         self.theme_button.clicked.connect(self.theme_toggle_requested.emit)
-        self.thread_list.itemClicked.connect(self.on_thread_clicked)
-        self.thread_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.thread_list.customContextMenuRequested.connect(self.on_context_menu_requested)
+        self.chat_list.itemClicked.connect(self.on_chat_clicked)
+        self.chat_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.chat_list.customContextMenuRequested.connect(self.on_context_menu_requested)
 
         self.search_timer = QTimer()
         self.search_timer.setSingleShot(True)
         self.search_timer.timeout.connect(self.apply_search_filter)
 
         self._apply_styles()
-        self.update_thread_list()
+        self.update_chat_list()
 
     def _apply_styles(self):
         c = self.colors
@@ -114,7 +114,7 @@ class ThreadController(QObject):
                 background-color: {c['bg_tertiary']};
             }}
         """)
-        self.new_thread_btn.setStyleSheet(f"""
+        self.new_chat_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {c['bg_primary']};
                 color: {c['accent']};
@@ -137,7 +137,7 @@ class ThreadController(QObject):
                 padding: 6px 8px;
             }}
         """)
-        self.thread_list.setStyleSheet(f"""
+        self.chat_list.setStyleSheet(f"""
             QListWidget {{
                 background-color: {c['bg_secondary']};
                 color: {c['text_primary']};
@@ -161,79 +161,81 @@ class ThreadController(QObject):
         self.config.theme = theme_name
         self.colors = get_colors(theme_name)
         self._apply_styles()
-        self.update_thread_display()
+        self.update_chat_display()
 
-    def set_active_thread_id(self, thread_id: Optional[str]):
-        self.active_thread_id = thread_id
-        self.update_thread_display()
+    def set_active_chat_id(self, chat_id: Optional[str]):
+        self.active_chat_id = chat_id
+        self.update_chat_display()
 
-    def update_thread_list(self, threads: Optional[List[Thread]] = None):
-        """Update the thread list with new threads."""
-        if threads is not None:
-            self.threads = threads
+    def update_chat_list(self, chats: Optional[List[Chat]] = None):
+        """Update the chat list with new chats."""
+        if chats is not None:
+            self.chats = chats
         self.apply_sorting_and_filtering()
 
     def apply_sorting_and_filtering(self):
-        """Apply sorting and filtering to the thread list."""
-        filtered = self.threads
+        """Apply sorting and filtering to the chat list."""
+        filtered = self.chats
         if self.search_filter:
-            filtered = [t for t in filtered
-                        if self.search_filter.lower() in t.name.lower()]
+            filtered = [
+                chat for chat in filtered
+                if self.search_filter.lower() in chat.name.lower()
+            ]
 
         if self.current_sort == "date_created":
-            filtered.sort(key=lambda t: t.created_at, reverse=True)
+            filtered.sort(key=lambda chat: chat.created_at, reverse=True)
         elif self.current_sort == "date_modified":
-            filtered.sort(key=lambda t: t.updated_at, reverse=True)
+            filtered.sort(key=lambda chat: chat.updated_at, reverse=True)
         else:
-            filtered.sort(key=lambda t: t.name.lower())
+            filtered.sort(key=lambda chat: chat.name.lower())
 
-        self.filtered_threads = filtered
-        self.update_thread_display()
+        self.filtered_chats = filtered
+        self.update_chat_display()
 
-    def update_thread_display(self):
-        """Update the thread list widget with filtered threads."""
-        self.thread_list.clear()
+    def update_chat_display(self):
+        """Update the chat list widget with filtered chats."""
+        self.chat_list.clear()
 
-        grouped_threads = self.group_threads_by_date(self.filtered_threads)
+        grouped_chats = self.group_chats_by_date(self.filtered_chats)
 
-        for date, threads in grouped_threads.items():
+        for date, chats in grouped_chats.items():
             date_item = QListWidgetItem(f"  {date}")
             date_item.setFlags(Qt.ItemFlag.NoItemFlags)
             date_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft)
             font = date_item.font()
             font.setBold(True)
             date_item.setFont(font)
-            self.thread_list.addItem(date_item)
+            self.chat_list.addItem(date_item)
 
-            for thread in threads:
+            for chat in chats:
                 item = QListWidgetItem()
-                item.setData(Qt.ItemDataRole.UserRole, thread)
+                item.setData(Qt.ItemDataRole.UserRole, chat)
                 item.setToolTip(
-                    f"Created: {thread.created_at.strftime('%Y-%m-%d %H:%M')}\n"
-                    f"Modified: {thread.updated_at.strftime('%Y-%m-%d %H:%M')}"
+                    f"Created: {chat.created_at.strftime('%Y-%m-%d %H:%M')}\n"
+                    f"Modified: {chat.updated_at.strftime('%Y-%m-%d %H:%M')}"
                 )
-                item_widget = self._create_thread_item_widget(thread)
-                row_height = self.THREAD_ITEM_HEIGHT + self.THREAD_ITEM_SPACING
+                item_widget = self._create_chat_item_widget(chat)
+                row_height = self.CHAT_ITEM_HEIGHT + self.CHAT_ITEM_SPACING
                 item.setSizeHint(QSize(0, row_height))
-                self.thread_list.addItem(item)
-                self.thread_list.setItemWidget(item, item_widget)
+                self.chat_list.addItem(item)
+                self.chat_list.setItemWidget(item, item_widget)
 
-                if thread.id == self.active_thread_id:
-                    self.thread_list.setCurrentItem(item)
+                if chat.id == self.active_chat_id:
+                    self.chat_list.setCurrentItem(item)
 
-    def _create_thread_item_widget(self, thread: Thread) -> QFrame:
-        """Build a thread item widget from ui_thread_item for the list row."""
+    def _create_chat_item_widget(self, chat: Chat) -> QFrame:
+        """Build a chat item widget from ui_chat_item for the list row."""
         frame = QFrame()
-        item_ui = Ui_ThreadItem()
+        item_ui = Ui_ChatItem()
         item_ui.setupUi(frame)
-        frame.setFixedHeight(self.THREAD_ITEM_HEIGHT)
+        frame.setFixedHeight(self.CHAT_ITEM_HEIGHT)
         frame.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
 
-        is_active = thread.id == self.active_thread_id
+        is_active = chat.id == self.active_chat_id
         c = self.colors
         border = c["accent"] if is_active else c["border"]
         frame.setStyleSheet(f"""
-            QFrame#threadItemFrame {{
+            QFrame#chatItemFrame {{
                 background-color: {c['bg_primary']};
                 border: 1px solid {border};
                 border-radius: 4px;
@@ -246,33 +248,33 @@ class ThreadController(QObject):
         """)
 
         name_label = frame.findChild(QLabel, "nameLabel")
-        name_label.setText(thread.name)
+        name_label.setText(chat.name)
         return frame
 
-    def group_threads_by_date(self, threads: List[Thread]) -> Dict[str, List[Thread]]:
-        """Group threads by date for display."""
-        groups: Dict[str, List[Thread]] = {}
+    def group_chats_by_date(self, chats: List[Chat]) -> Dict[str, List[Chat]]:
+        """Group chats by date for display."""
+        groups: Dict[str, List[Chat]] = {}
 
-        for thread in threads:
+        for chat in chats:
             now = datetime.now()
-            delta = now - thread.updated_at
+            delta = now - chat.updated_at
 
             if delta < timedelta(days=1):
                 date_key = "Today"
             elif delta < timedelta(days=2):
                 date_key = "Yesterday"
             elif delta < timedelta(days=7):
-                date_key = thread.updated_at.strftime("%A")
+                date_key = chat.updated_at.strftime("%A")
             elif delta < timedelta(days=30):
-                date_key = thread.updated_at.strftime("%B %d")
+                date_key = chat.updated_at.strftime("%B %d")
             else:
                 date_key = "Older"
 
             if date_key not in groups:
                 groups[date_key] = []
-            groups[date_key].append(thread)
+            groups[date_key].append(chat)
 
-        sorted_groups: Dict[str, List[Thread]] = {}
+        sorted_groups: Dict[str, List[Chat]] = {}
         for date_key in sorted(groups.keys(), key=lambda x: (
             99 if x == "Older" else
             0 if x == "Today" else
@@ -315,64 +317,64 @@ class ThreadController(QObject):
         """Apply the search filter."""
         self.apply_sorting_and_filtering()
 
-    def on_new_thread_clicked(self):
-        """Handle new thread button click."""
+    def on_new_chat_clicked(self):
+        """Handle new chat button click."""
         now = datetime.now()
-        new_thread = Thread(
-            thread_id=str(uuid.uuid4()),
-            name=default_thread_name(now),
+        new_chat = Chat(
+            chat_id=str(uuid.uuid4()),
+            name=default_chat_name(now),
             created_at=now,
             updated_at=now,
             messages=[]
         )
-        self.thread_created.emit(new_thread)
+        self.chat_created.emit(new_chat)
 
-    def on_thread_clicked(self, item: QListWidgetItem):
-        """Handle thread selection."""
+    def on_chat_clicked(self, item: QListWidgetItem):
+        """Handle chat selection."""
         if item is not None and item.flags() & Qt.ItemFlag.ItemIsEnabled:
-            thread = item.data(Qt.ItemDataRole.UserRole)
-            if thread:
-                self.thread_selected.emit(thread)
+            chat = item.data(Qt.ItemDataRole.UserRole)
+            if chat:
+                self.chat_selected.emit(chat)
 
     def on_context_menu_requested(self, position):
-        """Show context menu for thread operations."""
-        item = self.thread_list.itemAt(position)
+        """Show context menu for chat operations."""
+        item = self.chat_list.itemAt(position)
         if item and item.flags() & Qt.ItemFlag.ItemIsEnabled:
-            thread = item.data(Qt.ItemDataRole.UserRole)
-            if thread:
-                self.show_context_menu(position, thread)
+            chat = item.data(Qt.ItemDataRole.UserRole)
+            if chat:
+                self.show_context_menu(position, chat)
 
-    def show_context_menu(self, position, thread: Thread):
-        """Show context menu for thread operations."""
+    def show_context_menu(self, position, chat: Chat):
+        """Show context menu for chat operations."""
         menu = QMenu(self.widget)
 
         rename_action = menu.addAction("Rename")
-        rename_action.triggered.connect(lambda: self.rename_thread(thread))
+        rename_action.triggered.connect(lambda: self.rename_chat(chat))
 
         delete_action = menu.addAction("Delete")
-        delete_action.triggered.connect(lambda: self.delete_thread(thread))
+        delete_action.triggered.connect(lambda: self.delete_chat(chat))
 
-        menu.popup(self.thread_list.mapToGlobal(position))
+        menu.popup(self.chat_list.mapToGlobal(position))
 
-    def rename_thread(self, thread: Thread):
-        """Rename a thread."""
+    def rename_chat(self, chat: Chat):
+        """Rename a chat."""
         new_name, ok = QInputDialog.getText(
-            self.widget, "Rename Thread", "Enter new thread name:", text=thread.name
+            self.widget, "Rename Chat", "Enter new chat name:", text=chat.name
         )
 
         if ok and new_name:
-            thread.name = new_name
-            thread.updated_at = datetime.now()
-            self.thread_renamed.emit(thread)
+            chat.name = new_name
+            chat.updated_at = datetime.now()
+            self.chat_renamed.emit(chat)
 
-    def delete_thread(self, thread: Thread):
-        """Delete a thread."""
+    def delete_chat(self, chat: Chat):
+        """Delete a chat."""
         reply = QMessageBox.question(
-            self.widget, "Delete Thread",
-            f"Are you sure you want to delete the thread '{thread.name}'?",
+            self.widget, "Delete Chat",
+            f"Are you sure you want to delete the chat '{chat.name}'?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
 
         if reply == QMessageBox.StandardButton.Yes:
-            self.thread_deleted.emit(thread)
+            self.chat_deleted.emit(chat)

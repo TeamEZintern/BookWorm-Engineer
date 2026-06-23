@@ -97,11 +97,11 @@ A status indicator (e.g. "Idle", "Thinking...", "Running tool: bash") at the top
 
 ## Data model
 
-Each chat is stored as a JSON file on disk inside `.bookworm/threads/`:
+Each chat is stored as a JSON file on disk inside `.bookworm/chats/`:
 
 ```
 .bookworm/
-└── threads/
+└── chats/
     ├── 20260617-design-gui.json
     ├── 20260616-fix-rag-bug.json
     └── ...

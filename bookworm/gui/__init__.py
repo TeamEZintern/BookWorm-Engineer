@@ -6,7 +6,7 @@ replacing the terminal-based interface with a user-friendly graphical applicatio
 using PySide6.
 
 The GUI follows an MVC layout:
-- ``models/``      - data models (Thread, Message, ThreadStore)
+- ``models/``      - data models (Chat, Message, ChatStore)
 - ``views/``       - Qt Designer ``.ui`` files + generated ``ui_*.py``
 - ``controllers/`` - behaviour, wired to views via ``findChild()``
 """
@@ -15,17 +15,17 @@ __version__ = "0.1.0"
 __author__ = "BookWorm Engineer"
 
 from .config import GUIConfig
-from .controllers import AppController, ChatController, ThreadController
-from .models import Message, Thread, ThreadStore
+from .controllers import AppController, MainPanelController, SidePanelController
+from .models import Chat, ChatStore, Message
 from .themes import get_colors, build_stylesheet, COLOR_SCHEMES
 
 __all__ = [
     "AppController",
-    "ChatController",
-    "ThreadController",
+    "MainPanelController",
+    "SidePanelController",
     "Message",
-    "Thread",
-    "ThreadStore",
+    "Chat",
+    "ChatStore",
     "GUIConfig",
     "get_colors",
     "build_stylesheet",

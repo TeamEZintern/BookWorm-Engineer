@@ -1,9 +1,9 @@
 """
-Chat Controller
+Main Panel Controller
 
-Owns the chat panel view (``ui_chat_panel``) and all chat behaviour: rendering
-user bubbles, agent markdown, copy/redo actions, theme styling, and the input
-area. Wires widget signals via ``findChild()``.
+Owns the main panel view (``ui_main_panel``) and all chat behaviour:
+rendering user bubbles, agent markdown, copy/redo actions, theme styling,
+and the input area. Wires widget signals via ``findChild()``.
 """
 
 import re
@@ -18,11 +18,11 @@ from PySide6.QtWidgets import (
 
 from ..models import Message
 from ..themes import get_colors
-from ..views.panel.ui_chat_panel import Ui_ChatPanel
+from ..views.panel.ui_main_panel import Ui_MainPanel
 
 
-class ChatController(QObject):
-    """Controller for the main chat interface."""
+class MainPanelController(QObject):
+    """Controller for the main panel chat interface."""
 
     messages_changed = Signal()
 
@@ -37,7 +37,7 @@ class ChatController(QObject):
         self.is_processing = False
 
         self.widget = QWidget()
-        self.ui = Ui_ChatPanel()
+        self.ui = Ui_MainPanel()
         self.ui.setupUi(self.widget)
 
         self.scroll_area = self.widget.findChild(QScrollArea, "scrollArea")

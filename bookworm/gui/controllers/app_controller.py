@@ -2,9 +2,9 @@
 App Controller
 
 Top-level controller for the BookWorm GUI. Owns the main window view
-(``ui_main_window``), instantiates the thread and chat controllers, injects
-their widgets into the splitter, and coordinates loading a thread's
-conversation into the chat panel.
+(``ui_main_window``), instantiates the side panel and main panel controllers,
+injects their widgets into the splitter, and coordinates loading a chat's
+conversation into the main panel.
 """
 
 import uuid
@@ -14,16 +14,16 @@ from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QApplication, QMainWindow, QSplitter
 
 from ..config import GUIConfig
-from ..models import Message, Thread, ThreadStore, default_thread_name
+from ..models import Chat, ChatStore, Message, default_chat_name
 from ..themes import build_stylesheet
 from ..views.window.ui_main_window import Ui_MainWindow
-from .chat_controller import ChatController
-from .thread_controller import ThreadController
+from .main_panel_controller import MainPanelController
+from .side_panel_controller import SidePanelController
 
 
 class AppController(QObject):
     """
-    Main controller wiring together the window, thread panel, and chat panel.
+    Main controller wiring together the window, side panel, and main panel.
 
     Exposes ``self.window`` (a ``QMainWindow``) for the CLI to ``show()``.
     """
@@ -32,9 +32,9 @@ class AppController(QObject):
         super().__init__(parent)
         self.config = config
         self.gui_config = gui_config
-        threads_dir = config.working_dir / ".bookworm" / "threads"
-        self.store = ThreadStore(threads_dir)
-        self.current_thread_id = None
+        chats_dir = config.working_dir / ".bookworm" / "chats"
+        self.store = ChatStore(chats_dir)
+        self.current_chat_id = None
         self._loading_conversation = False
 
         self.window = QMainWindow()
@@ -50,20 +50,20 @@ class AppController(QObject):
 
         self.splitter = self.window.findChild(QSplitter, "mainSplitter")
 
-        self.thread_controller = ThreadController(gui_config)
-        self.chat_controller = ChatController(gui_config)
-        self.thread_controller.thread_selected.connect(self.on_thread_selected)
-        self.thread_controller.thread_created.connect(self.on_thread_created)
-        self.thread_controller.thread_renamed.connect(self.on_thread_renamed)
-        self.thread_controller.thread_deleted.connect(self.on_thread_deleted)
-        self.thread_controller.theme_toggle_requested.connect(self.on_theme_toggle)
-        self.chat_controller.messages_changed.connect(self._on_messages_changed)
+        self.side_panel_controller = SidePanelController(gui_config)
+        self.main_panel_controller = MainPanelController(gui_config)
+        self.side_panel_controller.chat_selected.connect(self.on_chat_selected)
+        self.side_panel_controller.chat_created.connect(self.on_chat_created)
+        self.side_panel_controller.chat_renamed.connect(self.on_chat_renamed)
+        self.side_panel_controller.chat_deleted.connect(self.on_chat_deleted)
+        self.side_panel_controller.theme_toggle_requested.connect(self.on_theme_toggle)
+        self.main_panel_controller.messages_changed.connect(self._on_messages_changed)
 
-        self.splitter.addWidget(self.thread_controller.widget)
-        self.splitter.addWidget(self.chat_controller.widget)
+        self.splitter.addWidget(self.side_panel_controller.widget)
+        self.splitter.addWidget(self.main_panel_controller.widget)
         self.splitter.setSizes([
-            gui_config.thread_panel_width,
-            self.window.width() - gui_config.thread_panel_width,
+            gui_config.side_panel_width,
+            self.window.width() - gui_config.side_panel_width,
         ])
 
         self.window.statusBar().showMessage("Ready")
@@ -72,7 +72,7 @@ class AppController(QObject):
         self._apply_theme_to_controllers()
 
     def _apply_theme_to_controllers(self):
-        self.thread_controller.apply_theme(self.gui_config.theme)
+        self.side_panel_controller.apply_theme(self.gui_config.theme)
 
     def _default_welcome_message(self) -> dict:
         return {
@@ -80,94 +80,94 @@ class AppController(QObject):
             "content": (
                 "Welcome to Bookworm GUI! This is a graphical interface for the "
                 "Bookworm AI coding assistant. You can create, rename, and delete "
-                "threads, and chat with the agent."
+                "chats, and chat with the agent."
             ),
             "timestamp": datetime.now().isoformat(),
         }
 
-    def _create_default_thread(self) -> Thread:
+    def _create_default_chat(self) -> Chat:
         now = datetime.now()
-        thread = Thread(
-            thread_id=str(uuid.uuid4()),
-            name=default_thread_name(now),
+        chat = Chat(
+            chat_id=str(uuid.uuid4()),
+            name=default_chat_name(now),
             created_at=now,
             updated_at=now,
             messages=[self._default_welcome_message()],
         )
-        self.store.add(thread)
-        return thread
+        self.store.add(chat)
+        return chat
 
     def load_initial_data(self):
-        """Load threads from disk and show the first conversation."""
+        """Load chats from disk and show the first conversation."""
         self.store.load()
 
         if self.store.is_empty():
-            self._create_default_thread()
+            self._create_default_chat()
 
-        self.update_thread_panel()
-        threads = self.store.all()
-        if threads:
-            self._select_thread(threads[0])
+        self.update_side_panel()
+        chats = self.store.all()
+        if chats:
+            self._select_chat(chats[0])
 
-    def update_thread_panel(self):
-        """Update the thread panel with current threads."""
-        self.thread_controller.update_thread_list(self.store.all())
+    def update_side_panel(self):
+        """Update the side panel with current chats."""
+        self.side_panel_controller.update_chat_list(self.store.all())
 
-    def _save_current_thread(self) -> None:
-        """Persist the active chat into the current thread JSON file."""
-        if self._loading_conversation or not self.current_thread_id:
+    def _save_current_chat(self) -> None:
+        """Persist the active chat into the current chat JSON file."""
+        if self._loading_conversation or not self.current_chat_id:
             return
-        thread = self.store.get(self.current_thread_id)
-        if thread is None:
+        chat = self.store.get(self.current_chat_id)
+        if chat is None:
             return
-        thread.messages = self.chat_controller.get_message_dicts()
-        thread.updated_at = datetime.now()
-        self.store.save(thread)
+        chat.messages = self.main_panel_controller.get_message_dicts()
+        chat.updated_at = datetime.now()
+        self.store.save(chat)
 
-    def _select_thread(self, thread: Thread) -> None:
-        """Load a thread's messages into the chat panel."""
+    def _select_chat(self, chat: Chat) -> None:
+        """Load a chat's messages into the main panel."""
         self._loading_conversation = True
         try:
-            self.current_thread_id = thread.id
-            self.thread_controller.set_active_thread_id(thread.id)
-            self.chat_controller.clear_messages()
-            for message_data in thread.messages:
-                self.chat_controller.add_message(Message.from_dict(message_data))
+            self.current_chat_id = chat.id
+            self.side_panel_controller.set_active_chat_id(chat.id)
+            self.main_panel_controller.clear_messages()
+            for message_data in chat.messages:
+                self.main_panel_controller.add_message(Message.from_dict(message_data))
         finally:
             self._loading_conversation = False
 
     def _on_messages_changed(self) -> None:
-        self._save_current_thread()
+        self._save_current_chat()
 
-    def on_thread_selected(self, thread: Thread):
-        if thread.id == self.current_thread_id:
+    def on_chat_selected(self, chat: Chat):
+        if chat.id == self.current_chat_id:
             return
-        self._save_current_thread()
-        self._select_thread(thread)
+        self._save_current_chat()
+        self._select_chat(chat)
 
-    def on_thread_created(self, thread: Thread):
-        self._save_current_thread()
-        self.store.add(thread)
-        self.update_thread_panel()
-        self._select_thread(thread)
+    def on_chat_created(self, chat: Chat):
+        self._save_current_chat()
+        self.store.add(chat)
+        self.update_side_panel()
+        self._select_chat(chat)
 
-    def on_thread_renamed(self, thread: Thread):
-        self.store.save(thread)
-        self.update_thread_panel()
+    def on_chat_renamed(self, chat: Chat):
+        self.store.save(chat)
+        self.update_side_panel()
 
-    def on_thread_deleted(self, thread: Thread):
-        was_current = thread.id == self.current_thread_id
-        self.store.remove(thread)
-        self.update_thread_panel()
+    def on_chat_deleted(self, chat: Chat):
+        was_current = chat.id == self.current_chat_id
+        self.store.remove(chat)
+        self.update_side_panel()
 
         if not was_current:
             return
 
         remaining = self.store.all()
         if remaining:
-            self._select_thread(remaining[0])
+            self._select_chat(remaining[0])
         else:
-            self._select_thread(self._create_default_thread())
+            self._select_chat(self._create_default_chat())
 
     def on_theme_toggle(self):
         self.gui_config.theme = "dark" if self.gui_config.theme == "light" else "light"
@@ -176,5 +176,5 @@ class AppController(QObject):
         if app:
             app.setStyleSheet(build_stylesheet(self.gui_config.theme))
 
-        self.chat_controller.apply_theme(self.gui_config.theme)
-        self.thread_controller.apply_theme(self.gui_config.theme)
+        self.main_panel_controller.apply_theme(self.gui_config.theme)
+        self.side_panel_controller.apply_theme(self.gui_config.theme)

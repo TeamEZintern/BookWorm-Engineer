@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>ThreadPanel</class>
- <widget class="QWidget" name="ThreadPanel">
+ <class>SidePanel</class>
+ <widget class="QWidget" name="SidePanel">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -75,7 +75,7 @@
         </size>
        </property>
        <property name="placeholderText">
-        <string>Search threads...</string>
+        <string>Search chats...</string>
        </property>
       </widget>
      </item>
@@ -94,7 +94,7 @@
         </size>
        </property>
        <property name="toolTip">
-        <string>Sort threads</string>
+        <string>Sort chats</string>
        </property>
        <property name="text">
         <string>☰</string>
@@ -102,7 +102,7 @@
       </widget>
      </item>
      <item>
-      <widget class="QPushButton" name="newThreadButton">
+      <widget class="QPushButton" name="newChatButton">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
          <horstretch>0</horstretch>
@@ -128,7 +128,7 @@
         </font>
        </property>
        <property name="toolTip">
-        <string>New Thread</string>
+        <string>New Chat</string>
        </property>
        <property name="text">
         <string>+</string>
@@ -138,7 +138,7 @@
     </layout>
    </item>
    <item>
-    <widget class="QListWidget" name="threadList">
+    <widget class="QListWidget" name="chatList">
      <property name="spacing">
       <number>2</number>
      </property>

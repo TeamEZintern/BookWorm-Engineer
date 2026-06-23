@@ -90,10 +90,10 @@ Backend data structures and storage for GUI functionality
 
 ### Chat Storage `DOING`
 
-JSON files stored in `.bookworm/threads/` directory, which is initialized in user's repository, not in the BookWorm-Engineer repository.
+JSON files stored in `.bookworm/chats/` directory, which is initialized in user's repository, not in the BookWorm-Engineer repository.
 
 - [x] File path structure defined (`<chat_id>.json`)
-- [x] Persistence layer implemented in `ThreadStore`
+- [x] Persistence layer implemented in `ChatStore`
 - [ ] Structured JSON schema
   - [x] id
   - [x] name
@@ -149,27 +149,27 @@ bookworm/gui/
 │   │   ├── main_window.ui
 │   │   └── ui_main_window.py
 │   ├── panel/
-│   │   ├── thread_panel.ui
-│   │   ├── ui_thread_panel.py
-│   │   ├── chat_panel.ui
-│   │   └── ui_chat_panel.py
+│   │   ├── side_panel.ui
+│   │   ├── ui_side_panel.py
+│   │   ├── main_panel.ui
+│   │   └── ui_main_panel.py
 │   └── widget/
 │       ├── message_bubble.ui
 │       ├── ui_message_bubble.py
-│       ├── thread_item.ui
-│       └── ui_thread_item.py
+│       ├── chat_item.ui
+│       └── ui_chat_item.py
 │
 ├── controllers/
 │   ├── __init__.py
 │   ├── app_controller.py
-│   ├── thread_controller.py
-│   └── chat_controller.py
+│   ├── side_panel_controller.py
+│   └── main_panel_controller.py
 │
 └── models/
     ├── __init__.py
-    ├── thread.py
+    ├── chat.py
     ├── message.py
-    └── thread_store.py
+    └── chat_store.py
 ```
 
 ### Design decisions
@@ -177,20 +177,20 @@ bookworm/gui/
 - [x] `.ui` and generated `ui_*.py` sit side-by-side in the same subfolder
 - [x] `.ui` files conform to the Qt Designer UI file format (`qt-designer-schema.xml`)
 - [x] Layout source of truth is the `.ui` files — edit them in Qt Designer (or equivalent), not by hand-editing XML
-- [x] Chat row template is `views/widget/thread_item.ui`; `thread_panel.ui` only defines the empty `QListWidget` — chat names are runtime data, not static Designer entries
+- [x] Chat row template is `views/widget/chat_item.ui`; `side_panel.ui` only defines the empty `QListWidget` — chat names are runtime data, not static Designer entries
 - [x] Do **not** hand-edit `ui_*.py` — they are generated output and will be overwritten on the next build
 - [x] Controller uses `findChild()` to wire up widget signals (no view wrapper layer)
 - [x] View files (.ui + generated) created
-- [x] Controller files created (app, thread, chat)
-- [x] Model files extracted (thread, message, thread_store)
-- [x] Monolithic panels deleted (chat_panel.py, thread_panel.py, main_window.py reworked)
+- [x] Controller files created (app, side panel, main panel)
+- [x] Model files extracted (chat, message, chat_store)
+- [x] Monolithic panels deleted (main_panel.py, side_panel.py, main_window.py reworked)
 
 ### `.ui` to `.py` conversion (`pyside6-uic`)
 
 Workflow:
 
 1. Edit the `.ui` file in Qt Designer and save.
-2. Run `pyside6-uic <file_dir>/<filename>.ui -o <file_dir>/ui_<file_name>.py` from the repo root. For example: `pyside6-uic gui/views/panel/thread_panel.ui -o gui/views/panel/ui_thread_panel.py`
+2. Run `pyside6-uic <file_dir>/<filename>.ui -o <file_dir>/ui_<file_name>.py` from the repo root. For example: `pyside6-uic bookworm/gui/views/panel/side_panel.ui -o bookworm/gui/views/panel/ui_side_panel.py`
 3. Commit both the updated `.ui` and the regenerated `ui_*.py`.
 
 Based on [PySide6 docs](https://doc.qt.io/qtforpython-6/tools/pyside-uic.html):

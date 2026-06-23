@@ -1,12 +1,12 @@
 ---
 name: GUI Remaining Features
-overview: "All unchecked items in [bookworm/gui/feature-list.md](bookworm/gui/feature-list.md) — the forward-looking GUI backlog after your cleanup edit. Ten bullet-level gaps across 4 areas: session mode switching, thread panel polish, agent message rendering, and draft-input persistence."
+overview: "All unchecked items in [bookworm/gui/feature-list.md](bookworm/gui/feature-list.md) — the forward-looking GUI backlog after your cleanup edit. Ten bullet-level gaps across 4 areas: session mode switching, side panel polish, agent message rendering, and draft-input persistence."
 todos:
   - id: mode-switch
     content: Mid-session GUI ↔ terminal switching (feature-list line 14)
     status: pending
   - id: three-dots-menu
-    content: Three-dots button on thread_item with rename/delete menu (line 37)
+    content: Three-dots button on chat_item with rename/delete menu (line 37)
     status: pending
   - id: search-filter
     content: Verify or complete search filtering logic (line 44)
@@ -21,10 +21,10 @@ todos:
     content: Collapsible tool execution / reasoning sections (line 80)
     status: pending
   - id: draft-input-schema
-    content: Add user-input field to thread JSON schema and Thread model (lines 97, 102–105)
+    content: Add user-input field to chat JSON schema and Chat model (lines 97, 102–105)
     status: pending
   - id: draft-input-switch
-    content: Save/load draft text when switching threads; default empty string (lines 103–105)
+    content: Save/load draft text when switching chats; default empty string (lines 103–105)
     status: pending
 isProject: false
 ---
@@ -46,21 +46,21 @@ After your edit, every `- [ ]` line in [bookworm/gui/feature-list.md](bookworm/g
 
 ---
 
-## 2. Conversation Threads Panel
+## 2. Side Panel
 
-### Thread Operations
+### Chat Operations
 
 **Three-dots button → context menu (rename / delete)** (line 37)
 
-- Goal: each thread row gets a visible `⋯` control that opens rename/delete, matching the mockup UX.
-- Current state: rename/delete **do** work via **right-click** context menu in [thread_controller.py](bookworm/gui/controllers/thread_controller.py) (`show_context_menu`). The gap is the dedicated three-dots **button** on `thread_item.ui`, not the menu logic itself.
+- Goal: each chat row gets a visible `⋯` control that opens rename/delete, matching the mockup UX.
+- Current state: rename/delete **do** work via **right-click** context menu in [side_panel_controller.py](bookworm/gui/controllers/side_panel_controller.py) (`show_context_menu`). The gap is the dedicated three-dots **button** on `chat_item.ui`, not the menu logic itself.
 
 ### Search
 
 **Filtering logic** (line 44)
 
-- Goal: real-time thread list filtering as the user types in the search box.
-- Current state: **likely already implemented** in [thread_controller.py](bookworm/gui/controllers/thread_controller.py) (`search_filter`, debounced `apply_search_filter`, name substring match in `apply_sorting_and_filtering`). If it works in the running app, this checkbox may be stale and can be ticked; if not, debug why the wired logic doesn’t surface in the UI.
+- Goal: real-time chat list filtering as the user types in the search box.
+- Current state: **likely already implemented** in [side_panel_controller.py](bookworm/gui/controllers/side_panel_controller.py) (`search_filter`, debounced `apply_search_filter`, name substring match in `apply_sorting_and_filtering`). If it works in the running app, this checkbox may be stale and can be ticked; if not, debug why the wired logic doesn’t surface in the UI.
 
 ---
 
@@ -85,21 +85,21 @@ Three related rendering gaps under **Agent Message `DOING`**:
 
 ---
 
-## 4. Data Management — Thread Storage
+## 4. Data Management — Chat Storage
 
 Parent item **Structured JSON schema** (line 97) stays unchecked because one sub-field is missing:
 
 ### **`user-input` draft field** (lines 102–105)
 
-Extend each thread JSON file under `.bookworm/threads/` with a draft input field:
+Extend each chat JSON file under `.bookworm/chats/` with a draft input field:
 
 | Sub-item | Behavior |
 |---|---|
-| Store draft text (line 103) | Text in the chat input field is saved as part of the thread’s persisted state |
-| Restore on thread switch (line 104) | Switching threads saves the current draft to the previous thread’s JSON and loads the next thread’s draft into the input field |
+| Store draft text (line 103) | Text in the chat input field is saved as part of the chat’s persisted state |
+| Restore on chat switch (line 104) | Switching chats saves the current draft to the previous chat’s JSON and loads the next chat’s draft into the input field |
 | Empty default (line 105) | Use `""` when no draft exists yet |
 
-- Current state: [thread.py](bookworm/gui/models/thread.py) schema requires `id`, `name`, `created_at`, `updated_at`, `messages` only — no `user-input` key. [design.md](bookworm/gui/design.md) still says drafts are in-memory only and discarded on close, which conflicts with this new spec.
+- Current state: [chat.py](bookworm/gui/models/chat.py) schema requires `id`, `name`, `created_at`, `updated_at`, `messages` only — no `user-input` key. [design.md](bookworm/gui/design.md) still says drafts are in-memory only and discarded on close, which conflicts with this new spec.
 
 ---
 
@@ -110,7 +110,7 @@ flowchart TB
   subgraph mode [Mode Switching]
     M1[midSession GUItoTerminal]
   end
-  subgraph threads [Threads Panel]
+  subgraph chats [Side Panel]
     T1[ThreeDots menu button]
     T2[Search filter verify or fix]
   end
@@ -119,7 +119,7 @@ flowchart TB
     C2[Advanced render]
     C3[Collapsible tool or reasoning blocks]
   end
-  subgraph data [Thread JSON]
+  subgraph data [Chat JSON]
     D1[user-input draft field]
     D2[Save restore on switch]
   end

@@ -1,6 +1,6 @@
 # GUI Naming Migration Plan
 
-> **Status:** Declaration only — no renames applied yet.  
+> **Status:** Implemented — file, symbol, UI, and JSON path renames applied.  
 > **Vocabulary:** chat (entity) · Side Panel (left list) · Main Panel (right conversation view)
 
 This document lists every file, path, symbol, and string change required to align the codebase with [design.md](design.md) and [feature-list.md](feature-list.md).
@@ -286,7 +286,7 @@ These files are **not renamed** but must be edited after the migration:
 ## 8. Suggested execution order
 
 1. Rename model files + symbols (`Chat`, `ChatStore`, path constant).
-2. Add `.bookworm/threads/` → `.bookworm/chats/` migration in `ChatStore.load()`.
+2. Wire `.bookworm/chats/` directly in `ChatStore` / `AppController` (no automatic migration).
 3. Rename and regenerate Side Panel `.ui` / `ui_*.py`; rename `side_panel_controller.py`.
 4. Rename and regenerate Main Panel `.ui` / `ui_*.py`; rename `main_panel_controller.py`.
 5. Update `app_controller.py`, `config.py`, package `__init__` files.
@@ -308,12 +308,12 @@ These files are **not renamed** but must be edited after the migration:
 
 ## 10. Checklist (tick when done)
 
-- [ ] Model files renamed
-- [ ] Controller files renamed
-- [ ] View `.ui` files renamed and `ui_*.py` regenerated
-- [ ] Test file renamed
-- [ ] `.bookworm/chats/` path wired + legacy migration
-- [ ] All imports and symbols updated
-- [ ] UI strings updated
-- [ ] Docs updated
-- [ ] `pytest` passes
+- [x] Model files renamed
+- [x] Controller files renamed
+- [x] View `.ui` files renamed and `ui_*.py` regenerated
+- [x] Test file renamed
+- [x] `.bookworm/chats/` path wired directly
+- [x] All imports and symbols updated
+- [x] UI strings updated
+- [x] Docs updated
+- [x] `pytest` passes

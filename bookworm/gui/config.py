@@ -15,12 +15,12 @@ class GUIConfig:
     window_height: int = 800
     window_title: str = "BookWorm Engineer"
     
-    # Thread panel settings
-    thread_panel_width: int = 300
-    thread_panel_min_width: int = 200
+    # Side panel settings
+    side_panel_width: int = 300
+    side_panel_min_width: int = 200
     
-    # Chat panel settings
-    chat_panel_min_height: int = 400
+    # Main panel settings
+    main_panel_min_height: int = 400
     
     # Message display settings
     message_bubble_max_width: int = 600
@@ -31,7 +31,7 @@ class GUIConfig:
     theme: str = "dark"  # light, dark
     
     # Performance settings
-    max_threads: int = 100
+    max_chats: int = 100
     auto_save_interval: int = 30  # seconds
     
     # Search settings
