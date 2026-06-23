@@ -5,11 +5,11 @@
 ```
 +---------------------------------------------------------------------------------------+
 |                         |                                                             |
-|  Left Panel (Threads)   |                       Main Panel (Chat)                     |
+|      Side Panel         |                       Main Panel                            |
 |                         |                                                             |
-|  [Search threads...]    |                        [Agent Banner]                       |
+|  [Search chats...]      |                        [Agent Banner]                       |
 |                         |                                                             |
-|  + New Thread [Sort ▼]  |  ┌───────────────────────────────────────────────────────┐  |
+|  + New Chat [Sort ▼]    |  ┌───────────────────────────────────────────────────────┐  |
 |                         |  │                      User message                     |  │
 | ----------------------- |  │                                                       |  │
 |  17 Jun 2026            |  └───────────────────────────────────────────────────────┘  |
@@ -32,51 +32,51 @@
 
 ## Panels
 
-### Left Panel — Conversation Threads
+### Side Panel
 
-Lists all saved conversations. Each thread shows:
+Lists all saved chats. Each chat shows:
 
-- **Thread name** (editable via rename)
+- **Chat name** (editable via rename)
 - **Date created** or **date last modified** (depending on sort)
 - **Context menu** (right-click): Rename, Delete
 
-#### Thread grouping and display
+#### Chat grouping and display
 
-Threads are grouped by calendar day (day-month format) when sorted by **Date created** or **Date modified**:
+Chats are grouped by calendar day (day-month format) when sorted by **Date created** or **Date modified**:
 
-- **Date created**: threads grouped by creation day (earliest first)
-- **Date modified**: threads grouped by modification day (earliest first)
+- **Date created**: chats grouped by creation day (earliest first)
+- **Date modified**: chats grouped by modification day (earliest first)
 
-When sorted by **Name**, threads are displayed alphabetically without date grouping.
+When sorted by **Name**, chats are displayed alphabetically without date grouping.
 
-#### Thread operations
+#### Chat operations
 
 | Action | Behaviour |
 |---|---|
-| **Create** | Click `+ New Thread`. A new empty thread appears with a default name (e.g. "New Thread"). The name is immediately editable. |
-| **Rename** | Double-click the thread name or use right-click → Rename. Inline editing replaces the label. |
+| **Create** | Click `+ New Chat`. A new empty chat appears with a default name (e.g. "New Chat"). The name is immediately editable. |
+| **Rename** | Double-click the chat name or use right-click → Rename. Inline editing replaces the label. |
 | **Delete** | Right-click → Delete. A confirmation dialog appears before removal. |
-| **Switch** | Single-click a thread to load its conversation into the main panel. |
+| **Switch** | Single-click a chat to load its conversation into the main panel. |
 
 #### Sorting
 
-A sort dropdown at the top of the left panel offers three options:
+A sort dropdown at the top of the side panel offers three options:
 
 | Sort mode | Behaviour |
 |---|---|
-| **Date created** | Threads grouped by creation day (earliest first), sorted chronologically |
-| **Date modified** | Threads grouped by modification day (earliest first), sorted chronologically |
+| **Date created** | Chats grouped by creation day (earliest first), sorted chronologically |
+| **Date modified** | Chats grouped by modification day (earliest first), sorted chronologically |
 | **Name** | Alphabetical A→Z |
 
 The current sort mode is persisted per session.
 
 #### Search
 
-A search bar filters threads by name in real time as the user types.
+A search bar filters chats by name in real time as the user types.
 
-### Main Panel — Conversation
+### Main Panel
 
-Displays the active thread's message history and the input area.
+Displays the active chat's message history and the input area.
 
 #### Messages
 
@@ -89,7 +89,7 @@ Messages are rendered as chat bubbles. User messages are aligned right, agent re
 
 #### Input area
 
-A multi-line text input at the bottom of the main panel. The input is cleared on send and preserved across thread switches (draft storage).
+A multi-line text input at the bottom of the main panel. The input is cleared on send and preserved across chat switches (draft storage).
 
 #### Agent status
 
@@ -97,7 +97,7 @@ A status indicator (e.g. "Idle", "Thinking...", "Running tool: bash") at the top
 
 ## Data model
 
-Each thread is stored as a JSON file on disk inside `.bookworm/threads/`:
+Each chat is stored as a JSON file on disk inside `.bookworm/threads/`:
 
 ```
 .bookworm/
@@ -107,7 +107,7 @@ Each thread is stored as a JSON file on disk inside `.bookworm/threads/`:
     └── ...
 ```
 
-### Thread file schema
+### Chat file schema
 
 ```json
 {
@@ -133,8 +133,8 @@ Each thread is stored as a JSON file on disk inside `.bookworm/threads/`:
 
 ## Implementation notes
 
-- Thread list is loaded on startup. Sorting and filtering operate on the in-memory list (no re-read from disk).
-- New threads default name to "New Thread" with a unique slug for the filename.
-- Delete moves the thread file to a trash location or marks it deleted; hard delete is a separate action.
-- The active thread is visually highlighted in the thread list.
-- Unsaved draft text is stored in memory per thread and discarded on app close (no draft persistence).
+- Chat list is loaded on startup. Sorting and filtering operate on the in-memory list (no re-read from disk).
+- New chats default name to "New Chat" with a unique slug for the filename.
+- Delete moves the chat file to a trash location or marks it deleted; hard delete is a separate action.
+- The active chat is visually highlighted in the side panel.
+- Unsaved draft text is stored in memory per chat and discarded on app close (no draft persistence).

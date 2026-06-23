@@ -15,53 +15,53 @@ GUI is default mode when running `bookworm`, terminal accessible with `bookworm 
 
 ---
 
-## Conversation Threads Panel `TODO`
+## Side Panel `TODO`
 
-Left panel displaying list of saved conversations with thread names
+Side panel displaying list of saved chats with chat names
 
-### Thread Display `DOING`
+### Chat Display `DOING`
 
-Shows thread name, creation/modified date, context menu
+Shows chat name, creation/modified date, context menu
 
 - [x] UI components
 - [x] Date grouping
 
-### Thread Operations `DOING`
+### Chat Operations `DOING`
 
-Create, rename, delete, and switch between threads
+Create, rename, delete, and switch between chats
 
-- [x] Click on thread in thread panel to open its coversation in the chat panel
-- [x] If a thread's converstaion is already opened in the chat panel, clicking on it in the thread panel does nothing
-- [x] Clicking a different thread saves the current conversation and loads the selected one, replacing the chat panel content entirely.
+- [x] Click on chat in side panel to open its coversation in the main panel
+- [x] If a chat's converstaion is already opened in the main panel, clicking on it in the side panel does nothing
+- [x] Clicking a different chat saves the current conversation and loads the selected one, replacing the main panel content entirely.
 - [x] Create/delete functionality
-- [ ] Three-dots button on a thread item shows a context menu to rename or delete it
+- [ ] Three-dots button on a chat item shows a context menu to rename or delete it
 
 ### Search `DOING`
 
-Real-time thread filtering by name
+Real-time chat filtering by name
 
 - [x] Search input
 - [ ] Filtering logic
 
 ### Date Grouping `DONE`
 
-Groups threads by calendar day when sorted by Date created or Date modified
+Groups chats by calendar day when sorted by Date created or Date modified
 
 - [x] Grouping by day/week/month
 - [x] Visual headers
 
 ### Sorting `DONE`
 
-Sort threads by Date created, Date modified, or Name
+Sort chats by Date created, Date modified, or Name
 
 - [x] Sort dropdown
 - [x] Sort functionality
 
 ---
 
-## Main Conversation Panel `DOING`
+## Main Panel `DOING`
 
-Right panel displaying active conversation with message history
+Main panel displaying active conversation with message history
 
 ### User Messages `DONE`
 
@@ -88,11 +88,11 @@ Agent responses rendered as formatted markdown
 
 Backend data structures and storage for GUI functionality
 
-### Thread Storage `DOING`
+### Chat Storage `DOING`
 
 JSON files stored in `.bookworm/threads/` directory, which is initialized in user's repository, not in the BookWorm-Engineer repository.
 
-- [x] File path structure defined (`<thread_id>.json`)
+- [x] File path structure defined (`<chat_id>.json`)
 - [x] Persistence layer implemented in `ThreadStore`
 - [ ] Structured JSON schema
   - [x] id
@@ -100,8 +100,8 @@ JSON files stored in `.bookworm/threads/` directory, which is initialized in use
   - [x] timestamps
   - [x] messages
   - [ ] user-input
-    - [ ] Text typed into the user-input field is stored as part of a thread's memory
-    - [ ] When user switches between threads, the drafted message of the previous thread is saved in the JSON, and the drafted message of the next thread is loaded into the user-input field.
+    - [ ] Text typed into the user-input field is stored as part of a chat's memory
+    - [ ] When user switches between chats, the drafted message of the previous chat is saved in the JSON, and the drafted message of the next chat is loaded into the user-input field.
     - [ ] Empty string in the case of there being no text in the user-input field yet.
 
 ---
@@ -118,7 +118,7 @@ JSON files stored in `.bookworm/threads/` directory, which is initialized in use
 
 ### Visual Feedback `DONE`
 
-Active thread highlighting and visual indicators
+Active chat highlighting and visual indicators
 
 - [x] Highlighting implemented
 - [x] Selection feedback working
@@ -177,7 +177,7 @@ bookworm/gui/
 - [x] `.ui` and generated `ui_*.py` sit side-by-side in the same subfolder
 - [x] `.ui` files conform to the Qt Designer UI file format (`qt-designer-schema.xml`)
 - [x] Layout source of truth is the `.ui` files — edit them in Qt Designer (or equivalent), not by hand-editing XML
-- [x] Thread row template is `views/widget/thread_item.ui`; `thread_panel.ui` only defines the empty `QListWidget` — thread names are runtime data, not static Designer entries
+- [x] Chat row template is `views/widget/thread_item.ui`; `thread_panel.ui` only defines the empty `QListWidget` — chat names are runtime data, not static Designer entries
 - [x] Do **not** hand-edit `ui_*.py` — they are generated output and will be overwritten on the next build
 - [x] Controller uses `findChild()` to wire up widget signals (no view wrapper layer)
 - [x] View files (.ui + generated) created
