@@ -2,26 +2,14 @@
 
 > In-depth design implementation log for the BookWorm GUI.
 
-## GUI Mode Switching `DONE`
+## Mode Switching `DONE`
 
 GUI is default mode when running `bookworm`, terminal accessible with `bookworm terminal`
 
-- [x] Command-line argument parsing implemented
+- [x] Command-line argument parsing
 - [x] GUI mode detection working
 - [x] GUI window launch wired into CLI
 - [x] PySide6 added to dependencies
-
-### Default GUI Mode `DONE`
-
-Bookworm launches GUI interface by default
-
-- [x] `bookworm` with no args launches GUI
-- [x] QApplication + BookwormGUI wired in cli.py
-
-### Mode Switching `TODO`
-
-Ability to switch between GUI and terminal modes
-
 - [x] Choose at the start of a session
 - [ ] Switch in between GUI and terminal in the middle of a session
 
@@ -31,15 +19,12 @@ Ability to switch between GUI and terminal modes
 
 Left panel displaying list of saved conversations with thread names
 
-- [x] Thread display implemented
-- [x] Basic operations working
-
 ### Thread Display `DOING`
 
 Shows thread name, creation/modified date, context menu
 
-- [x] UI components created
-- [x] Date grouping implemented
+- [x] UI components
+- [x] Date grouping
 
 ### Thread Operations `DOING`
 
@@ -48,29 +33,29 @@ Create, rename, delete, and switch between threads
 - [x] Click on thread in thread panel to open its coversation in the chat panel
 - [x] If a thread's converstaion is already opened in the chat panel, clicking on it in the thread panel does nothing
 - [x] Clicking a different thread saves the current conversation and loads the selected one, replacing the chat panel content entirely.
-- [x] Create/delete functionality implemented
-- [x] Right clicking a thread shows a context menu to rename or delete it
+- [x] Create/delete functionality
+- [ ] Three-dots button on a thread item shows a context menu to rename or delete it
 
-### Search `TODO`
+### Search `DOING`
 
 Real-time thread filtering by name
 
-- [x] Search input added
-- [ ] Filtering logic planned
+- [x] Search input
+- [ ] Filtering logic
 
 ### Date Grouping `DONE`
 
 Groups threads by calendar day when sorted by Date created or Date modified
 
-- [x] Grouping by day/week/month implemented
-- [x] Visual headers added
+- [x] Grouping by day/week/month
+- [x] Visual headers
 
 ### Sorting `DONE`
 
 Sort threads by Date created, Date modified, or Name
 
-- [x] Sort dropdown implemented
-- [x] Sort functionality working
+- [x] Sort dropdown
+- [x] Sort functionality
 
 ---
 
@@ -78,50 +63,24 @@ Sort threads by Date created, Date modified, or Name
 
 Right panel displaying active conversation with message history
 
-- [x] Basic chat UI created
-- [x] Message bubbles implemented
+### User Messages `DONE`
 
-### Message Bubbles `DONE`
+Chat messages given by user
 
-Chat-style message display with user and agent alignment
+- [x] User input field
+- [x] Message bubble UI
+- [x] Timestamp display under message bubble
 
-- [x] Message bubble UI created
-- [x] Styling applied
-
-### Markdown Rendering `DOING`
+### Agent Message `DOING`
 
 Agent responses rendered as formatted markdown
 
-- [x] Basic markdown parsing implemented
-- [ ] Advanced formatting planned
-
-### Tool Execution Blocks `TODO`
-
-Collapsible sections for tool execution output
-
-- [x] UI structure prepared
-- [ ] Integration pending
-
-### Timestamps `DONE`
-
-Optional message timestamps on hover or compact display
-
-- [x] Timestamp display implemented
-- [x] Hover tooltips added
-
-### Input Area `DOING`
-
-Multi-line text input for user messages with send functionality
-
-- [x] Input field created
-- [x] Send button functional
-
-### Agent Status `DONE`
-
-Visual indicator showing agent state (Idle, Thinking, Running tool)
-
-- [x] Status bar implemented
-- [x] State indicators working
+- [ ] Markdown parsing from raw LLM output
+- [ ] Advanced format render
+- [ ] Collapsible sections for tool execution and thinking/reasoning
+- [x] Copy and Redo buttons at the bottom.
+  - Copy means to copy the raw markdown of the agent output.
+  - Redo means re-prompting the agent with the same user input to get a new response, often because the original output had a glitch or the user was not satisfied with it.
 
 ---
 
@@ -129,57 +88,33 @@ Visual indicator showing agent state (Idle, Thinking, Running tool)
 
 Backend data structures and storage for GUI functionality
 
-- [x] Thread model created
-- [x] Storage abstraction implemented
+### Thread Storage `DOING`
 
-### Thread Storage `DONE`
-
-JSON files stored in `.bookworm/threads/` directory
+JSON files stored in `.bookworm/threads/` directory, which is initialized in user's repository, not in the BookWorm-Engineer repository.
 
 - [x] File path structure defined (`<thread_id>.json`)
 - [x] Persistence layer implemented in `ThreadStore`
-
-### Thread Schema `DONE`
-
-Structured JSON schema with id, name, timestamps, and messages
-
-- [x] Data model defined
-- [x] Schema validation implemented (`validate_thread_data`, `validate_message_data`)
-
-### Draft Persistence `TODO`
-
-In-memory draft text storage for unsaved messages
-
-- [x] Architecture planned
-- [ ] Implementation pending
+- [ ] Structured JSON schema
+  - [x] id
+  - [x] name
+  - [x] timestamps
+  - [x] messages
+  - [ ] user-input
+    - [ ] Text typed into the user-input field is stored as part of a thread's memory
+    - [ ] When user switches between threads, the drafted message of the previous thread is saved in the JSON, and the drafted message of the next thread is loaded into the user-input field.
+    - [ ] Empty string in the case of there being no text in the user-input field yet.
 
 ---
 
-## User Interface Features `DOING`
+## Additional UI/UX enhancements `DOING`
 
-Additional UI/UX enhancements
-
-- [x] Context menus implemented
-- [x] Visual feedback added
+- [x] Context menus
 - [x] Theme toggle button (header bar)
 - [x] Light and dark colour palettes (`themes.py`)
 - [x] Global QSS stylesheet cascades to all standard widgets
 - [x] Theme-aware inline styles for message bubbles, inputs, buttons
 - [x] Live theme switching without restart
 
-### Context Menus `DONE`
-
-Right-click menus for thread operations
-
-- [x] Right-click menus created
-- [x] Actions connected
-
-### Inline Editing `DOING`
-
-Double-click thread names for immediate renaming
-
-- [x] Edit mode initiated
-- [ ] Validation in progress
 
 ### Visual Feedback `DONE`
 
@@ -194,38 +129,6 @@ User confirmation for destructive actions like deletion
 
 - [x] Delete confirmation implemented
 - [x] Error dialogs added
-
----
-
-## Integration Features `TODO`
-
-Integration with Bookworm agent backend
-
-- [x] Architecture defined
-- [x] Backend connection planned
-
-### Backend Communication `TODO`
-
-Real-time communication with Bookworm agent
-
-- [x] Connection interface designed
-- [ ] Message passing planned
-
-### Thread Synchronization `DOING`
-
-Sync thread state with agent backend
-
-- [x] Active thread messages saved before switching threads
-- [x] Create, rename, and delete update the JSON store
-- [ ] Agent backend sync pending
-
-### Message Persistence `DOING`
-
-Persistent storage of conversation history
-
-- [x] Messages saved to the active thread JSON on each chat update
-- [x] Threads loaded from `.bookworm/threads/` on startup
-- [ ] Agent backend streaming persistence pending
 
 ---
 
@@ -272,7 +175,6 @@ bookworm/gui/
 ### Design decisions
 
 - [x] `.ui` and generated `ui_*.py` sit side-by-side in the same subfolder
-- [x] Both committed to git
 - [x] `.ui` files conform to the Qt Designer UI file format (`qt-designer-schema.xml`)
 - [x] Layout source of truth is the `.ui` files — edit them in Qt Designer (or equivalent), not by hand-editing XML
 - [x] Thread row template is `views/widget/thread_item.ui`; `thread_panel.ui` only defines the empty `QListWidget` — thread names are runtime data, not static Designer entries
@@ -301,4 +203,3 @@ Based on [PySide6 docs](https://doc.qt.io/qtforpython-6/tools/pyside-uic.html):
 - Do **not** hand-edit `ui_*.py` — changes are lost on re-generation; put layout changes in the `.ui` file instead
 - Prefer `pyside6-uic` over raw `uic -g python` to avoid version mismatches
 - For a full list of options: `pyside6-uic -h`
-
