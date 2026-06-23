@@ -9,7 +9,7 @@ and the input area. Wires widget signals via ``findChild()``.
 import re
 from typing import List
 
-from PySide6.QtCore import QObject, QTimer, Qt, Signal
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QGuiApplication, QTextBlockFormat, QTextCursor
 from PySide6.QtWidgets import (
     QWidget, QLabel, QScrollArea, QFrame, QTextEdit,
@@ -26,6 +26,7 @@ class MainPanelController(QObject):
 
     messages_changed = Signal()
     draft_changed = Signal()
+    agent_turn_requested = Signal()
 
     INPUT_MAX_HEIGHT = 120
     INPUT_STYLE_PADDING = 8
@@ -303,11 +304,27 @@ class MainPanelController(QObject):
         self._request_agent_response()
 
     def _request_agent_response(self):
-        """Ask the agent for a response (simulated until backend is wired)."""
+        """Ask AppController to run the real agent for a response."""
         self.is_processing = True
         self.send_button.setEnabled(False)
-        # TODO: Send conversation history to agent and stream response
-        QTimer.singleShot(1000, self.simulate_agent_response)
+        self.agent_turn_requested.emit()
+
+    def complete_agent_turn(self, content: str) -> None:
+        """Append the agent's final response and re-enable input."""
+        if content:
+            self.add_message(Message(role="assistant", content=content))
+        self._finish_agent_turn()
+
+    def fail_agent_turn(self, error: str) -> None:
+        """Show an agent failure in the conversation."""
+        self.add_message(
+            Message(role="assistant", content=f"Error: {error}")
+        )
+        self._finish_agent_turn()
+
+    def _finish_agent_turn(self) -> None:
+        self.is_processing = False
+        self.send_button.setEnabled(True)
 
     def create_markdown_widget(self, content: str, colors: dict) -> QWidget:
         """Create a widget for displaying markdown content."""
@@ -412,20 +429,3 @@ class MainPanelController(QObject):
         self._resize_message_input()
 
         self._request_agent_response()
-
-    def simulate_agent_response(self):
-        """Simulate an agent response for testing."""
-        agent_message = Message(
-            role="assistant",
-            content=(
-                "This is a simulated agent response. In the real implementation, "
-                "this would be the actual response from the Bookworm agent.\n\n"
-                "1. First item\n"
-                "2. Second item\n"
-                "3. Third item"
-            )
-        )
-        self.add_message(agent_message)
-
-        self.is_processing = False
-        self.send_button.setEnabled(True)

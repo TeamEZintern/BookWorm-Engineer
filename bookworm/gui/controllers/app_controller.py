@@ -13,6 +13,13 @@ from datetime import datetime
 from PySide6.QtCore import QObject, QTimer
 from PySide6.QtWidgets import QApplication, QMainWindow, QSplitter
 
+from bookworm.agent import Agent
+from bookworm.llm import create_client
+from bookworm.prompts import build_system_prompt
+from bookworm.tools import create_tool_registry
+
+from ..agent_runner import AgentRunner
+from ..ask_user_bridge import AskUserBridge
 from ..config import GUIConfig
 from ..models import Chat, ChatStore, Message, default_chat_name
 from ..themes import build_stylesheet
@@ -59,6 +66,22 @@ class AppController(QObject):
         self.side_panel_controller.theme_toggle_requested.connect(self.on_theme_toggle)
         self.main_panel_controller.messages_changed.connect(self._on_messages_changed)
         self.main_panel_controller.draft_changed.connect(self._on_draft_changed)
+        self.main_panel_controller.agent_turn_requested.connect(self._on_agent_turn_requested)
+
+        self._ask_user_bridge = AskUserBridge(self.window)
+        tool_registry = create_tool_registry(
+            config,
+            ask_user_fn=self._ask_user_bridge.ask,
+        )
+        self.agent = Agent(
+            config=config,
+            client=create_client(config),
+            tool_registry=tool_registry,
+            system_prompt=build_system_prompt(config),
+        )
+        self._agent_runner = AgentRunner(self)
+        self._agent_runner.response_ready.connect(self._on_agent_response_ready)
+        self._agent_runner.error.connect(self._on_agent_error)
 
         self.splitter.addWidget(self.side_panel_controller.widget)
         self.splitter.addWidget(self.main_panel_controller.widget)
@@ -136,8 +159,28 @@ class AppController(QObject):
             for message_data in chat.messages:
                 self.main_panel_controller.add_message(Message.from_dict(message_data))
             self.main_panel_controller.set_draft(chat.draft)
+            self._sync_agent_from_panel()
         finally:
             self._loading_conversation = False
+
+    def _sync_agent_from_panel(self) -> None:
+        """Align the backend agent with the visible chat history."""
+        self.agent.load_conversation(self.main_panel_controller.get_message_dicts())
+
+    def _on_agent_turn_requested(self) -> None:
+        if self._agent_runner.is_running():
+            return
+        self._sync_agent_from_panel()
+        self.window.statusBar().showMessage("Thinking...")
+        self._agent_runner.start_turn(self.agent)
+
+    def _on_agent_response_ready(self, content: str) -> None:
+        self.main_panel_controller.complete_agent_turn(content)
+        self.window.statusBar().showMessage("Ready")
+
+    def _on_agent_error(self, error: str) -> None:
+        self.main_panel_controller.fail_agent_turn(error)
+        self.window.statusBar().showMessage(f"Error: {error}")
 
     def _on_messages_changed(self) -> None:
         self._save_current_chat()

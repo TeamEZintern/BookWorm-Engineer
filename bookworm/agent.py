@@ -90,7 +90,7 @@ class Agent:
             start_time = time.time()
 
             try: 
-                response_text = self._run_turn()
+                response_text = self.run_turn()
             except Exception as exc: 
                 raise RuntimeError(f"Failed to generate response: {exc}") from exc
             
@@ -99,6 +99,28 @@ class Agent:
             hours, remainder = divmod(elapsed, 3600)
             minutes, seconds = divmod(remainder, 60)
             print(f"Time taken: {int(hours):02}:{int(minutes):02}:{seconds:05.2f}\n")
+
+    def load_conversation(self, chat_messages: list[dict[str, Any]]) -> None:
+        """Rebuild agent history from persisted GUI chat messages."""
+        self.messages = [
+            {"role": "system", "content": build_system_prompt(self.config, self._mode)}
+        ]
+        for message in chat_messages:
+            role = message.get("role")
+            if role not in {"user", "assistant"}:
+                continue
+            api_message: dict[str, Any] = {
+                "role": role,
+                "content": message.get("content", ""),
+            }
+            tool_calls = message.get("tool_calls") or []
+            if tool_calls:
+                api_message["tool_calls"] = tool_calls
+            self.messages.append(api_message)
+
+    def run_turn(self) -> str:
+        """Run one agent turn until the model returns a final assistant message."""
+        return self._run_turn()
 
     def _run_turn(self) -> str:
         while True:

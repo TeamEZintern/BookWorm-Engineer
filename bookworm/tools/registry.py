@@ -13,10 +13,13 @@ class ToolRegistry:
     implementations: dict[str, Callable[..., str]]
 
 
-def create_tool_registry(config: Config) -> ToolRegistry:
+def create_tool_registry(
+    config: Config,
+    ask_user_fn: Callable[[str], str] | None = None,
+) -> ToolRegistry:
     return ToolRegistry(
         schema=SCHEMA,
-        implementations=create_implementations(config),
+        implementations=create_implementations(config, ask_user_fn=ask_user_fn),
     )
 
 def call_tool(registry: ToolRegistry, name: str, arguments_json: str) -> str:
