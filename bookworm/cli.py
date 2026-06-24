@@ -24,12 +24,14 @@ def main() -> int:
 
     if subcommand == "gui":
         from PySide6.QtWidgets import QApplication
+        from PySide6.QtCore import QTimer
         from .gui import AppController, GUIConfig
 
         app = QApplication(sys.argv)
         gui_config = GUIConfig.from_config(config)
         controller = AppController(config, gui_config)
         controller.window.show()
+        QTimer.singleShot(0, controller.main_panel_controller.refresh_message_layouts)
         return app.exec()
     
     if subcommand == "terminal":

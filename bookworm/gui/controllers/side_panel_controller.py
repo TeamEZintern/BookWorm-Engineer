@@ -43,6 +43,20 @@ class _ChatItemClickFilter(QObject):
     def _is_overflow_click(self, watched: QObject, event: QEvent) -> bool:
         pos = event.pos()
         if watched is not self._frame:
+            if not isinstance(watched, QWidget):
+                return False
+            if not self._frame.isAncestorOf(watched):
+                # #region agent log
+                from bookworm.debug_session_log import debug_log
+
+                debug_log(
+                    "side_panel_controller.py:_is_overflow_click",
+                    "skipped mapFrom - not in hierarchy",
+                    {"watched": type(watched).__name__},
+                    hypothesis_id="F",
+                )
+                # #endregion
+                return False
             pos = self._frame.mapFrom(watched, pos)
         return self._frame.childAt(pos) is self._overflow_button
 
@@ -231,8 +245,73 @@ class SidePanelController(QObject):
         self.update_chat_display()
 
     def set_active_chat_id(self, chat_id: Optional[str]):
+        if chat_id == self.active_chat_id:
+            return
+        # #region agent log
+        from bookworm.debug_session_log import debug_log
+
+        debug_log(
+            "side_panel_controller.py:set_active_chat_id",
+            "update highlight only",
+            {"chat_id": chat_id},
+            hypothesis_id="F",
+        )
+        # #endregion
         self.active_chat_id = chat_id
-        self.update_chat_display()
+        self._update_active_chat_highlight()
+
+    def _chat_item_stylesheet(self, is_active: bool) -> str:
+        c = self.colors
+        border = c["accent"] if is_active else c["border"]
+        return f"""
+            QFrame#chatItemFrame {{
+                background-color: {c['bg_primary']};
+                border: 1px solid {border};
+                border-radius: 4px;
+            }}
+            QLabel#nameLabel {{
+                color: {c['text_primary']};
+                background: transparent;
+                padding: 0px;
+            }}
+            QLineEdit#nameEdit {{
+                color: {c['text_primary']};
+                background-color: {c['bg_primary']};
+                border: 1px solid {c['accent']};
+                border-radius: 2px;
+                padding: 0px 2px;
+            }}
+            QPushButton#overflowMenuButton {{
+                background-color: transparent;
+                color: {c['text_secondary']};
+                border: none;
+                border-radius: 4px;
+                padding: 0px;
+                font-size: 16px;
+            }}
+            QPushButton#overflowMenuButton:hover {{
+                background-color: {c['bg_tertiary']};
+                color: {c['text_primary']};
+            }}
+        """
+
+    def _apply_chat_item_style(self, frame: QFrame, is_active: bool) -> None:
+        frame.setStyleSheet(self._chat_item_stylesheet(is_active))
+
+    def _update_active_chat_highlight(self) -> None:
+        """Restyle list rows for the active chat without rebuilding the list."""
+        for index in range(self.chat_list.count()):
+            item = self.chat_list.item(index)
+            if item is None or not (item.flags() & Qt.ItemFlag.ItemIsEnabled):
+                continue
+            chat = item.data(Qt.ItemDataRole.UserRole)
+            if not chat:
+                continue
+            widget = self.chat_list.itemWidget(item)
+            if isinstance(widget, QFrame):
+                self._apply_chat_item_style(widget, chat.id == self.active_chat_id)
+            if chat.id == self.active_chat_id:
+                self.chat_list.setCurrentItem(item)
 
     def update_chat_list(self, chats: Optional[List[Chat]] = None):
         """Update the chat list with new chats."""
@@ -300,40 +379,7 @@ class SidePanelController(QObject):
         item_ui.setupUi(frame)
         frame.setFixedHeight(self.CHAT_ITEM_HEIGHT)
 
-        is_active = chat.id == self.active_chat_id
-        c = self.colors
-        border = c["accent"] if is_active else c["border"]
-        frame.setStyleSheet(f"""
-            QFrame#chatItemFrame {{
-                background-color: {c['bg_primary']};
-                border: 1px solid {border};
-                border-radius: 4px;
-            }}
-            QLabel#nameLabel {{
-                color: {c['text_primary']};
-                background: transparent;
-                padding: 0px;
-            }}
-            QLineEdit#nameEdit {{
-                color: {c['text_primary']};
-                background-color: {c['bg_primary']};
-                border: 1px solid {c['accent']};
-                border-radius: 2px;
-                padding: 0px 2px;
-            }}
-            QPushButton#overflowMenuButton {{
-                background-color: transparent;
-                color: {c['text_secondary']};
-                border: none;
-                border-radius: 4px;
-                padding: 0px;
-                font-size: 16px;
-            }}
-            QPushButton#overflowMenuButton:hover {{
-                background-color: {c['bg_tertiary']};
-                color: {c['text_primary']};
-            }}
-        """)
+        self._apply_chat_item_style(frame, chat.id == self.active_chat_id)
 
         name_label = frame.findChild(QLabel, "nameLabel")
         name_label.setText(chat.name)

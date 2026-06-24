@@ -1,6 +1,7 @@
 """Markdown rendering for agent messages in the GUI."""
 
-from typing import Dict
+import re
+from typing import Callable, Dict, Optional
 
 import markdown
 from pygments.formatters import HtmlFormatter
@@ -37,6 +38,13 @@ def build_markdown_document_css(colors: Dict[str, str]) -> str:
         p, li {{
             color: {colors['text_primary']};
             margin: 4px 0;
+        }}
+        ul, ol {{
+            margin: 4px 0;
+            padding-left: 20px;
+        }}
+        ul {{
+            list-style-type: disc;
         }}
         a {{
             color: {colors['accent']};
@@ -81,50 +89,128 @@ def build_markdown_document_css(colors: Dict[str, str]) -> str:
     """
 
 
+def _normalize_bullet_markers(content: str) -> str:
+    """Convert asterisk list markers to hyphens (not inline **bold**)."""
+    return re.sub(r"(?m)^(\s*)\*(?=\s+(?!\*))", r"\1-", content or "")
+
+
 def render_markdown_html(content: str, colors: Dict[str, str]) -> str:
     """Convert markdown to a themed HTML document."""
     _MARKDOWN.reset()
-    body = _MARKDOWN.convert(content or "")
+    body = _MARKDOWN.convert(_normalize_bullet_markers(content))
     css = build_markdown_document_css(colors)
     return f"<!DOCTYPE html><html><head><style>{css}</style></head><body>{body}</body></html>"
 
 
-def _adjust_browser_height(browser) -> None:
-    doc = browser.document()
+def _is_embedded(view) -> bool:
+    """True when the view is attached to a visible top-level window."""
+    window = view.window()
+    return window is not None and window.isVisible()
+
+
+def _adjust_view_height(view) -> None:
+    if not _is_embedded(view):
+        return
+    doc = view.document()
     height = int(doc.documentLayout().documentSize().height()) + 8
-    browser.setFixedHeight(max(height, 20))
+    view.setFixedHeight(max(height, 20))
 
 
-def _configure_browser(browser, colors: Dict[str, str]) -> None:
+def _schedule_view_height(view) -> None:
+    from PySide6.QtCore import QTimer
+
+    QTimer.singleShot(0, lambda: _adjust_view_height(view))
+
+
+def _configure_view(view) -> None:
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QFrame
 
-    browser.setOpenExternalLinks(True)
-    browser.setFrameShape(QFrame.Shape.NoFrame)
-    browser.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-    browser.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-    browser.setStyleSheet("background: transparent;")
-    browser.document().setDocumentMargin(0)
-    browser.document().documentLayout().documentSizeChanged.connect(
-        lambda _size: _adjust_browser_height(browser)
+    view.setReadOnly(True)
+    view.setFrameShape(QFrame.Shape.NoFrame)
+    view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    view.setStyleSheet("background: transparent;")
+    view.setTextInteractionFlags(
+        Qt.TextInteractionFlag.TextSelectableByMouse
+        | Qt.TextInteractionFlag.LinksAccessibleByMouse
     )
+    view.document().setDocumentMargin(0)
+
+
+def _ensure_view_hooks(view) -> None:
+    if getattr(view, "_markdown_hooks_ready", False):
+        return
+    view.document().documentLayout().documentSizeChanged.connect(
+        lambda _size: _schedule_view_height(view)
+    )
+    view._markdown_hooks_ready = True
+
+
+def create_markdown_view():
+    """Create an empty read-only rich-text view (populate after adding to layout)."""
+    from PySide6.QtCore import Qt, QUrl
+    from PySide6.QtGui import QDesktopServices
+    from PySide6.QtWidgets import QTextEdit
+
+    class MarkdownView(QTextEdit):
+        """Read-only rich text with external link support."""
+
+        def mouseReleaseEvent(self, event) -> None:
+            if event.button() == Qt.MouseButton.LeftButton:
+                anchor = self.anchorAt(event.pos())
+                if anchor:
+                    QDesktopServices.openUrl(QUrl(anchor))
+                    return
+            super().mouseReleaseEvent(event)
+
+    view = MarkdownView()
+    _configure_view(view)
+    return view
+
+
+# Backwards-compatible alias
+create_markdown_browser = create_markdown_view
 
 
 def create_markdown_widget(content: str, colors: Dict[str, str]):
-    """Create a read-only markdown widget sized to its content."""
-    from PySide6.QtWidgets import QTextBrowser
-
-    browser = QTextBrowser()
-    _configure_browser(browser, colors)
-    update_markdown_widget(browser, content, colors)
-    return browser
+    """Create a markdown view pre-populated with content."""
+    view = create_markdown_view()
+    update_markdown_widget(view, content, colors)
+    return view
 
 
 def update_markdown_widget(
-    browser,
+    view,
     content: str,
     colors: Dict[str, str],
+    is_valid: Optional[Callable[[], bool]] = None,
 ) -> None:
     """Re-render markdown HTML and resize the widget."""
-    browser.setHtml(render_markdown_html(content, colors))
-    _adjust_browser_height(browser)
+    from PySide6.QtCore import QTimer
+
+    from bookworm.debug_session_log import debug_log
+
+    def apply() -> None:
+        valid = is_valid() if is_valid is not None else True
+        embedded = _is_embedded(view)
+        # #region agent log
+        debug_log(
+            "markdown_renderer.py:update_markdown_widget",
+            "apply markdown",
+            {
+                "valid": valid,
+                "embedded": embedded,
+                "has_parent": view.parent() is not None,
+                "content_len": len(content or ""),
+            },
+            hypothesis_id="C",
+        )
+        # #endregion
+        if not valid or not embedded:
+            return
+        _ensure_view_hooks(view)
+        view.setHtml(render_markdown_html(content, colors))
+        _schedule_view_height(view)
+
+    QTimer.singleShot(0, apply)

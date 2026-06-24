@@ -12,6 +12,35 @@ from .tools import ToolRegistry, call_tool
 HALLUNCINATION_THRESHOLD = 0.75
 
 
+def _api_tool_calls_from_gui(tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert GUI-persisted tool metadata to OpenAI API tool_calls shape."""
+    api_calls: list[dict[str, Any]] = []
+    for tool_call in tool_calls:
+        if "function" in tool_call:
+            api_calls.append(
+                {
+                    "id": tool_call["id"],
+                    "type": tool_call.get("type", "function"),
+                    "function": {
+                        "name": tool_call["function"]["name"],
+                        "arguments": tool_call["function"]["arguments"],
+                    },
+                }
+            )
+            continue
+        api_calls.append(
+            {
+                "id": tool_call["id"],
+                "type": "function",
+                "function": {
+                    "name": tool_call["name"],
+                    "arguments": tool_call.get("arguments", "{}"),
+                },
+            }
+        )
+    return api_calls
+
+
 class Agent:
     def __init__(
         self,
@@ -115,8 +144,21 @@ class Agent:
             }
             tool_calls = message.get("tool_calls") or []
             if tool_calls:
-                api_message["tool_calls"] = tool_calls
+                api_message["tool_calls"] = _api_tool_calls_from_gui(tool_calls)
             self.messages.append(api_message)
+            if role == "assistant":
+                for tool_call in tool_calls:
+                    result = tool_call.get("result")
+                    call_id = tool_call.get("id")
+                    if result is None or not call_id:
+                        continue
+                    self.messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call_id,
+                            "content": result,
+                        }
+                    )
 
     def run_turn(self, event_handler: TurnEventHandler | None = None) -> str:
         """Run one agent turn until the model returns a final assistant message."""

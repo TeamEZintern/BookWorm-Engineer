@@ -164,9 +164,9 @@ class AppController(QObject):
         try:
             self.current_chat_id = chat.id
             self.side_panel_controller.set_active_chat_id(chat.id)
-            self.main_panel_controller.clear_messages()
-            for message_data in chat.messages:
-                self.main_panel_controller.add_message(Message.from_dict(message_data))
+            self.main_panel_controller.load_messages(
+                [Message.from_dict(message_data) for message_data in chat.messages]
+            )
             self.main_panel_controller.set_draft(chat.draft)
             self._sync_agent_from_panel()
         finally:

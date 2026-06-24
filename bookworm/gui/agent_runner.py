@@ -32,7 +32,6 @@ class _TurnWorker(QObject):
             on_tool_result=self.tool_result.emit,
             on_reasoning_delta=self.reasoning_delta.emit,
             on_turn_complete=self._on_turn_complete,
-            on_error=self.failed.emit,
         )
         try:
             self._agent.run_turn_with_events(handler)

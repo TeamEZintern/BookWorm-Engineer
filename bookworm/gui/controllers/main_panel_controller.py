@@ -8,14 +8,14 @@ and the input area. Wires widget signals via ``findChild()``.
 
 from typing import List, Optional
 
-from PySide6.QtCore import QObject, Qt, QTimer, Signal
+from PySide6.QtCore import QObject, Qt, QTimer, Signal, QEvent
 from PySide6.QtGui import QGuiApplication, QTextBlockFormat, QTextCursor
 from PySide6.QtWidgets import (
     QWidget, QLabel, QScrollArea, QFrame, QTextEdit,
     QPushButton, QVBoxLayout, QHBoxLayout, QSizePolicy,
 )
 
-from ..markdown_renderer import create_markdown_widget, update_markdown_widget
+from ..markdown_renderer import create_markdown_view, update_markdown_widget
 from ..models import Message
 from ..themes import get_colors
 from ..views.panel.ui_main_panel import Ui_MainPanel
@@ -40,11 +40,18 @@ class MainPanelController(QObject):
         self.is_processing = False
         self._streaming_message: Optional[Message] = None
         self._streaming_tool_calls: list = []
+        self._suppress_layout_refresh = False
+        self._active_markdown_views: set = set()
 
         self._markdown_update_timer = QTimer(self)
         self._markdown_update_timer.setSingleShot(True)
         self._markdown_update_timer.setInterval(self.MARKDOWN_DEBOUNCE_MS)
         self._markdown_update_timer.timeout.connect(self._flush_streaming_markdown)
+
+        self._layout_refresh_timer = QTimer(self)
+        self._layout_refresh_timer.setSingleShot(True)
+        self._layout_refresh_timer.setInterval(0)
+        self._layout_refresh_timer.timeout.connect(self._do_refresh_message_layouts)
 
         self.widget = QWidget()
         self.ui = Ui_MainPanel()
@@ -72,6 +79,85 @@ class MainPanelController(QObject):
         self._resize_message_input()
         self.message_input.textChanged.connect(self._on_message_input_changed)
         self.send_button.clicked.connect(self.on_send_clicked)
+        self.scroll_area.installEventFilter(self)
+        self.widget.installEventFilter(self)
+
+    def eventFilter(self, watched, event) -> bool:
+        if (
+            not self._suppress_layout_refresh
+            and watched in (self.scroll_area, self.widget)
+            and event.type() in (QEvent.Type.Show, QEvent.Type.Resize)
+        ):
+            # #region agent log
+            from bookworm.debug_session_log import debug_log
+
+            debug_log(
+                "main_panel_controller.py:eventFilter",
+                "schedule refresh from event",
+                {"event": int(event.type())},
+                hypothesis_id="B",
+            )
+            # #endregion
+            self._layout_refresh_timer.start()
+        return super().eventFilter(watched, event)
+
+    def _message_content_max_width(self) -> int:
+        for source in (self.scroll_area.viewport(), self.widget, self.scroll_area):
+            width = source.width()
+            if width > 0:
+                return max(200, int(width * 0.65))
+        return 480
+
+    def refresh_message_layouts(self) -> None:
+        """Schedule a single coalesced layout refresh."""
+        self._layout_refresh_timer.start()
+
+    def _do_refresh_message_layouts(self) -> None:
+        """Recompute bubble widths and markdown heights after the panel is laid out."""
+        max_width = self._message_content_max_width()
+        assistant_count = 0
+        for message in self.messages:
+            if message.role == "user":
+                bubble = getattr(message, "user_bubble", None)
+                if bubble is not None:
+                    bubble.setMaximumWidth(max_width)
+            elif message.role == "assistant":
+                browser = getattr(message, "markdown_browser", None)
+                if browser is not None:
+                    assistant_count += 1
+                    update_markdown_widget(
+                        browser,
+                        message.content,
+                        self.colors,
+                        is_valid=lambda v=browser: v in self._active_markdown_views,
+                    )
+        # #region agent log
+        from bookworm.debug_session_log import debug_log
+
+        debug_log(
+            "main_panel_controller.py:refresh_message_layouts",
+            "refresh layouts",
+            {
+                "max_width": max_width,
+                "assistant_count": assistant_count,
+                "active_views": len(self._active_markdown_views),
+            },
+            hypothesis_id="D",
+        )
+        # #endregion
+        self.scroll_area.widget().updateGeometry()
+
+    def _render_assistant_message(self, message: Message) -> None:
+        browser = getattr(message, "markdown_browser", None)
+        if browser is None:
+            return
+        update_markdown_widget(
+            browser,
+            message.content,
+            self.colors,
+            is_valid=lambda v=browser: v in self._active_markdown_views,
+        )
+        self.scroll_to_bottom()
 
     def _apply_styles(self):
         """Apply theme-dependent inline styles to the static widgets."""
@@ -165,6 +251,17 @@ class MainPanelController(QObject):
         self._resize_message_input()
 
     def clear_messages(self):
+        # #region agent log
+        from bookworm.debug_session_log import debug_log
+
+        debug_log(
+            "main_panel_controller.py:clear_messages",
+            "clear messages",
+            {"active_views_before": len(self._active_markdown_views)},
+            hypothesis_id="E",
+        )
+        # #endregion
+        self._active_markdown_views.clear()
         self.messages.clear()
         self._streaming_message = None
         self._streaming_tool_calls = []
@@ -174,6 +271,42 @@ class MainPanelController(QObject):
                 item.widget().deleteLater()
         self.message_layout.addStretch()
         self.scroll_area.update()
+
+    def load_messages(self, messages: List[Message]) -> None:
+        """Replace the panel with a full message list (batch render after layout)."""
+        # #region agent log
+        from bookworm.debug_session_log import debug_log
+
+        debug_log(
+            "main_panel_controller.py:load_messages",
+            "load messages start",
+            {"count": len(messages)},
+            hypothesis_id="A",
+        )
+        # #endregion
+        self._suppress_layout_refresh = True
+        try:
+            self.clear_messages()
+            for message in messages:
+                self.messages.append(message)
+                self.display_message(message, render_markdown=False)
+        finally:
+            self._suppress_layout_refresh = False
+        QTimer.singleShot(0, self._after_load_messages)
+
+    def _after_load_messages(self) -> None:
+        # #region agent log
+        from bookworm.debug_session_log import debug_log
+
+        debug_log(
+            "main_panel_controller.py:_after_load_messages",
+            "load messages finish",
+            {"message_count": len(self.messages)},
+            hypothesis_id="A",
+        )
+        # #endregion
+        self.refresh_message_layouts()
+        self.scroll_to_bottom()
 
     def add_message(self, message: Message):
         """Add a message to the chat."""
@@ -190,7 +323,7 @@ class MainPanelController(QObject):
             if message is not self._streaming_message
         ]
 
-    def display_message(self, message: Message):
+    def display_message(self, message: Message, render_markdown: bool = True):
         """Display a single message in the chat."""
         if message.role == "user":
             widget = self._create_user_message_widget(message)
@@ -198,6 +331,12 @@ class MainPanelController(QObject):
             widget = self._create_assistant_message_widget(message)
         message.display_widget = widget
         self.message_layout.insertWidget(self.message_layout.count() - 1, widget)
+        if message.role == "user":
+            bubble = getattr(message, "user_bubble", None)
+            if bubble is not None:
+                bubble.setMaximumWidth(self._message_content_max_width())
+        elif render_markdown:
+            QTimer.singleShot(0, lambda m=message: self._render_assistant_message(m))
 
     def _format_timestamp(self, timestamp) -> str:
         return timestamp.strftime("%I:%M %p, %d/%m/%Y").lstrip("0").replace(" 0", " ")
@@ -225,7 +364,8 @@ class MainPanelController(QObject):
                 padding: 10px 14px;
             }}
         """)
-        bubble.setMaximumWidth(int(self.widget.width() * 0.65) if self.widget.width() > 0 else 480)
+        bubble.setMaximumWidth(self._message_content_max_width())
+        message.user_bubble = bubble
         row.addWidget(bubble)
         layout.addLayout(row)
 
@@ -248,7 +388,8 @@ class MainPanelController(QObject):
         layout.setSpacing(8)
         layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
-        browser = create_markdown_widget(message.content, self.colors)
+        browser = create_markdown_view()
+        self._active_markdown_views.add(browser)
         message.markdown_browser = browser
         layout.addWidget(browser)
 
@@ -378,8 +519,17 @@ class MainPanelController(QObject):
 
     def fail_agent_turn(self, error: str) -> None:
         """Show an agent failure in the conversation."""
+        if not self.is_processing:
+            return
+
         if self._streaming_message is not None:
-            self._streaming_message.content = f"Error: {error}"
+            partial = (self._streaming_message.content or "").strip()
+            if partial:
+                self._streaming_message.content = (
+                    f"{partial}\n\n---\n\n**Error:** {error}"
+                )
+            else:
+                self._streaming_message.content = f"Error: {error}"
             self._flush_streaming_markdown(force=True)
             self._streaming_message = None
             self._streaming_tool_calls = []
@@ -388,6 +538,7 @@ class MainPanelController(QObject):
                 Message(role="assistant", content=f"Error: {error}")
             )
         self._finish_agent_turn()
+        self.messages_changed.emit()
 
     def _finish_agent_turn(self) -> None:
         self.is_processing = False
@@ -403,7 +554,12 @@ class MainPanelController(QObject):
         browser = getattr(message, "markdown_browser", None) if message else None
         if message is None or browser is None:
             return
-        update_markdown_widget(browser, message.content, self.colors)
+        update_markdown_widget(
+            browser,
+            message.content,
+            self.colors,
+            is_valid=lambda v=browser: v in self._active_markdown_views,
+        )
         self.scroll_to_bottom()
 
     def apply_theme(self, theme_name: str):
@@ -414,18 +570,25 @@ class MainPanelController(QObject):
         self.messages = []
         self._streaming_message = None
         self._streaming_tool_calls = []
-        while self.message_layout.count() > 0:
-            item = self.message_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        self.message_layout.addStretch()
-        self.scroll_area.update()
+        self._active_markdown_views.clear()
+        self._suppress_layout_refresh = True
+        try:
+            while self.message_layout.count() > 0:
+                item = self.message_layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+            self.message_layout.addStretch()
+            self.scroll_area.update()
 
-        for msg in saved:
-            msg.display_widget = None
-            msg.markdown_browser = None
-            self.messages.append(msg)
-            self.display_message(msg)
+            for msg in saved:
+                msg.display_widget = None
+                msg.markdown_browser = None
+                msg.user_bubble = None
+                self.messages.append(msg)
+                self.display_message(msg, render_markdown=False)
+        finally:
+            self._suppress_layout_refresh = False
+        QTimer.singleShot(0, self.refresh_message_layouts)
 
     def scroll_to_bottom(self):
         """Scroll the chat to the bottom."""

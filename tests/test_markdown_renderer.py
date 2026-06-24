@@ -63,6 +63,14 @@ def test_render_markdown_html_includes_link():
     assert "Docs" in html
 
 
+def test_render_markdown_html_converts_asterisk_bullets():
+    html = render_markdown_html("* **Label:** value\n* item two", _LIGHT_COLORS)
+    assert "<ul>" in html
+    assert "<li>" in html
+    assert "**Label:**" not in html
+    assert "<strong>Label:</strong>" in html
+
+
 def test_build_markdown_document_css_uses_theme_colors():
     css = build_markdown_document_css(_DARK_COLORS)
     assert "#e0e0e0" in css

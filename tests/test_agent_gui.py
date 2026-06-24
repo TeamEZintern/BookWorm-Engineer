@@ -62,3 +62,47 @@ def test_load_conversation_skips_non_chat_roles(tmp_path):
 
     assert len(agent.messages) == 2
     assert agent.messages[1]["content"] == "Keep me"
+
+
+def test_load_conversation_converts_gui_tool_calls(tmp_path):
+    config = _fake_config(tmp_path)
+    registry = ToolRegistry(schema=[], implementations={})
+    agent = Agent(config, MagicMock(), registry, "system prompt")
+
+    agent.load_conversation([
+        {
+            "role": "user",
+            "content": "Describe the project",
+            "timestamp": "2026-06-24T10:00:00",
+            "tool_calls": [],
+        },
+        {
+            "role": "assistant",
+            "content": "It is a Pong game.",
+            "timestamp": "2026-06-24T10:00:01",
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "name": "read_file",
+                    "arguments": '{"file_path": "AGENTS.md"}',
+                    "result": "# AGENTS.md\nProject overview",
+                }
+            ],
+        },
+    ])
+
+    assert agent.messages[2]["tool_calls"] == [
+        {
+            "id": "call_1",
+            "type": "function",
+            "function": {
+                "name": "read_file",
+                "arguments": '{"file_path": "AGENTS.md"}',
+            },
+        }
+    ]
+    assert agent.messages[3] == {
+        "role": "tool",
+        "tool_call_id": "call_1",
+        "content": "# AGENTS.md\nProject overview",
+    }
