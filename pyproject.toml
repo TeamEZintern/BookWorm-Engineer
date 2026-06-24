@@ -18,6 +18,8 @@ dependencies = [
     "sentence-transformers",
     "pypdf",
     "pyside6",
+    "markdown",
+    "pygments",
 ]
 
 [project.optional-dependencies]

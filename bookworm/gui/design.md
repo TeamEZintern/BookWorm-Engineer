@@ -83,8 +83,9 @@ Displays the active chat's message history and the input area.
 Messages are rendered as chat bubbles. User messages are aligned right, agent responses left.
 
 - **User messages** — plain text, right-aligned
-- **Agent responses** — rendered markdown, left-aligned
-- **Tool execution blocks** — collapsible code/output blocks within agent messages
+- **Agent responses** — rendered markdown via `markdown_renderer.py` (`markdown` + Pygments → themed HTML in a read-only `QTextBrowser`), left-aligned
+- **Streaming** — assistant replies stream token-by-token into a placeholder message; markdown re-renders with debouncing during the turn
+- **Tool execution blocks** — collapsible code/output blocks within agent messages (planned; tool/reasoning events are already emitted and stored on `Message.tool_calls`)
 - **Timestamps** — optional, shown on hover or in a compact format for the last message
 
 #### Input area
@@ -93,7 +94,7 @@ A multi-line text input at the bottom of the main panel. The input is cleared on
 
 #### Agent status
 
-A status indicator (e.g. "Idle", "Thinking...", "Running tool: bash") at the top of the main panel or inline in the conversation.
+The status bar shows turn progress (e.g. "Thinking...", "Running tool: bash", "Ready"). Agent turns run on a background thread via `AgentRunner`; the UI receives streamed text and structured tool events through Qt signals.
 
 ## Data model
 

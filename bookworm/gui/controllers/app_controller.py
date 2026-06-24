@@ -80,7 +80,16 @@ class AppController(QObject):
             system_prompt=build_system_prompt(config),
         )
         self._agent_runner = AgentRunner(self)
-        self._agent_runner.response_ready.connect(self._on_agent_response_ready)
+        self._agent_runner.text_delta.connect(
+            self.main_panel_controller.append_agent_text_delta
+        )
+        self._agent_runner.tool_call_started.connect(
+            self._on_agent_tool_call_started
+        )
+        self._agent_runner.tool_result.connect(
+            self.main_panel_controller.record_agent_tool_result
+        )
+        self._agent_runner.turn_complete.connect(self._on_agent_turn_complete)
         self._agent_runner.error.connect(self._on_agent_error)
 
         self.splitter.addWidget(self.side_panel_controller.widget)
@@ -174,8 +183,21 @@ class AppController(QObject):
         self.window.statusBar().showMessage("Thinking...")
         self._agent_runner.start_turn(self.agent)
 
-    def _on_agent_response_ready(self, content: str) -> None:
-        self.main_panel_controller.complete_agent_turn(content)
+    def _on_agent_tool_call_started(
+        self,
+        name: str,
+        arguments: str,
+        call_id: str,
+    ) -> None:
+        self.main_panel_controller.record_agent_tool_call_started(
+            name,
+            arguments,
+            call_id,
+        )
+        self.window.statusBar().showMessage(f"Running tool: {name}")
+
+    def _on_agent_turn_complete(self, content: str, tool_calls: list) -> None:
+        self.main_panel_controller.complete_streaming_agent_turn(content, tool_calls)
         self.window.statusBar().showMessage("Ready")
 
     def _on_agent_error(self, error: str) -> None:

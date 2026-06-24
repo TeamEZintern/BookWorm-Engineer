@@ -4,28 +4,28 @@ overview: Replace hand-rolled markdown rendering, wire the GUI to the real Agent
 todos:
   - id: deps
     content: Add `markdown` and `pygments` to pyproject.toml dependencies
-    status: pending
+    status: completed
   - id: renderer-module
     content: Create bookworm/gui/markdown_renderer.py with render_markdown_html() and create_markdown_widget(); support update_markdown_widget() for streaming re-renders
-    status: pending
+    status: completed
   - id: theme-css
     content: Build themed CSS helper using existing COLOR_SCHEMES keys + Pygments class styles
-    status: pending
+    status: completed
   - id: agent-events
     content: Refactor Agent turn loop to emit callbacks/signals (text_delta, tool_call_start, tool_result, turn_complete, error) instead of only returning final text
-    status: pending
+    status: completed
   - id: agent-runner
     content: Add GUI-side AgentRunner (QThread worker) bridging Agent events to Qt signals; wire MainPanelController to replace simulate_agent_response
-    status: pending
+    status: completed
   - id: streaming-ui
     content: Create placeholder assistant message on turn start; append streamed text; debounced markdown re-render; finalize message on turn_complete
-    status: pending
+    status: completed
   - id: tests
     content: Add tests/test_markdown_renderer.py (HTML) and tests/test_agent_events.py (event protocol / turn loop hooks)
-    status: pending
+    status: completed
   - id: docs
     content: Update feature-list.md, design.md, and gui_remaining_features plan; note collapsible UI is next consumer of event protocol
-    status: pending
+    status: completed
 isProject: false
 ---
 

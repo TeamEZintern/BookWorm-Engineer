@@ -13,10 +13,10 @@ todos:
     status: pending
   - id: markdown-parse
     content: Full markdown parsing from raw LLM output (line 78)
-    status: pending
+    status: completed
   - id: markdown-advanced
     content: Advanced format rendering — code, inline, links, tables (line 79)
-    status: pending
+    status: completed
   - id: collapsible-sections
     content: Collapsible tool execution / reasoning sections (line 80)
     status: pending
@@ -68,20 +68,20 @@ After your edit, every `- [ ]` line in [bookworm/gui/feature-list.md](bookworm/g
 
 Three related rendering gaps under **Agent Message `DOING`**:
 
-### **Markdown parsing from raw LLM output** (line 78)
+### **Markdown parsing from raw LLM output** (line 78) — DONE
 
-- Goal: reliably turn raw agent markdown into structured UI widgets.
-- Current state: [chat_controller.py](bookworm/gui/controllers/chat_controller.py) has a hand-rolled `create_markdown_widget()` that handles a **subset** of markdown (headings, lists, code fences line-by-line). Full/common markdown (nested lists, links, tables, inline code, blockquotes) is not covered. Agent responses are still **simulated** (`simulate_agent_response`), not from the real LLM.
+- Implemented in [markdown_renderer.py](bookworm/gui/markdown_renderer.py) via the `markdown` library + themed HTML in `QTextBrowser`.
+- [main_panel_controller.py](bookworm/gui/controllers/main_panel_controller.py) uses the renderer for all assistant messages.
 
-### **Advanced format render** (line 79)
+### **Advanced format render** (line 79) — DONE
 
-- Goal: richer rendering beyond basic line parsing — e.g. syntax-highlighted code blocks, inline formatting (`**bold**`, `` `code` ``), links, tables, blockquotes.
-- Builds on top of line 78; likely needs a proper markdown library (e.g. `markdown` + HTML in `QTextBrowser`, or a Qt-native renderer) instead of the current per-line `QLabel` approach.
+- Syntax-highlighted fenced code (Pygments), inline formatting, links, tables, blockquotes, and lists.
+- Streaming turns debounce markdown re-renders (~75 ms) and finalize on `turn_complete`.
 
-### **Collapsible sections for tool execution and thinking/reasoning** (line 80)
+### **Collapsible sections for tool execution and thinking/reasoning** (line 81) — NEXT
 
 - Goal: when the agent runs tools or emits reasoning/thinking blocks, show them in expandable/collapsible UI sections (similar to ChatGPT tool calls or chain-of-thought disclosure).
-- Depends on real agent integration: the GUI must receive structured tool-call / reasoning events, not just final text. Copy/Redo (already done) operate on raw markdown today.
+- Prerequisite done: real agent integration with structured events (`tool_call_started`, `tool_result`, `reasoning_delta`) via [agent_events.py](bookworm/agent_events.py) and [agent_runner.py](bookworm/gui/agent_runner.py); metadata is stored on `Message.tool_calls`. Collapsible widgets are UI-only from here.
 
 ---
 
@@ -138,8 +138,8 @@ If you want an order that unblocks the most user-visible value:
 
 1. **Draft persistence** — small schema + controller change; improves daily UX immediately
 2. **Overflow menu button (three dots)** — UI-only; reuses existing rename/delete handlers
-3. **Real markdown + advanced render** — needed before agent backend wiring pays off visually
-4. **Collapsible tool/reasoning sections** — needs real agent streaming/events
+3. ~~**Real markdown + advanced render**~~ — done ([markdown_render_upgrade plan](markdown_render_upgrade_f7bbcb4c.plan.md))
+4. **Collapsible tool/reasoning sections** — event protocol ready; UI widgets remain
 5. **Mid-session mode switch** — architectural; lowest urgency unless explicitly required
 
 No code changes in this step — this is the backlog read from your edited feature list.

@@ -6,16 +6,16 @@ rendering user bubbles, agent markdown, copy/redo actions, theme styling,
 and the input area. Wires widget signals via ``findChild()``.
 """
 
-import re
-from typing import List
+from typing import List, Optional
 
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QGuiApplication, QTextBlockFormat, QTextCursor
 from PySide6.QtWidgets import (
     QWidget, QLabel, QScrollArea, QFrame, QTextEdit,
     QPushButton, QVBoxLayout, QHBoxLayout, QSizePolicy,
 )
 
+from ..markdown_renderer import create_markdown_widget, update_markdown_widget
 from ..models import Message
 from ..themes import get_colors
 from ..views.panel.ui_main_panel import Ui_MainPanel
@@ -30,6 +30,7 @@ class MainPanelController(QObject):
 
     INPUT_MAX_HEIGHT = 120
     INPUT_STYLE_PADDING = 8
+    MARKDOWN_DEBOUNCE_MS = 75
 
     def __init__(self, config, parent=None):
         super().__init__(parent)
@@ -37,6 +38,13 @@ class MainPanelController(QObject):
         self.colors = get_colors(config.theme)
         self.messages: List[Message] = []
         self.is_processing = False
+        self._streaming_message: Optional[Message] = None
+        self._streaming_tool_calls: list = []
+
+        self._markdown_update_timer = QTimer(self)
+        self._markdown_update_timer.setSingleShot(True)
+        self._markdown_update_timer.setInterval(self.MARKDOWN_DEBOUNCE_MS)
+        self._markdown_update_timer.timeout.connect(self._flush_streaming_markdown)
 
         self.widget = QWidget()
         self.ui = Ui_MainPanel()
@@ -158,6 +166,8 @@ class MainPanelController(QObject):
 
     def clear_messages(self):
         self.messages.clear()
+        self._streaming_message = None
+        self._streaming_tool_calls = []
         while self.message_layout.count() > 0:
             item = self.message_layout.takeAt(0)
             if item.widget():
@@ -174,7 +184,11 @@ class MainPanelController(QObject):
 
     def get_message_dicts(self):
         """Return the current conversation for persistence."""
-        return [message.to_dict() for message in self.messages]
+        return [
+            message.to_dict()
+            for message in self.messages
+            if message is not self._streaming_message
+        ]
 
     def display_message(self, message: Message):
         """Display a single message in the chat."""
@@ -227,15 +241,16 @@ class MainPanelController(QObject):
         return container
 
     def _create_assistant_message_widget(self, message: Message) -> QWidget:
-        """Agent message: plain markdown with copy/redo buttons below."""
+        """Agent message: markdown with copy/redo buttons below."""
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 8, 0, 8)
         layout.setSpacing(8)
         layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
-        content = self.create_markdown_widget(message.content, self.colors)
-        layout.addWidget(content)
+        browser = create_markdown_widget(message.content, self.colors)
+        message.markdown_browser = browser
+        layout.addWidget(browser)
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
@@ -291,6 +306,7 @@ class MainPanelController(QObject):
             self.message_layout.removeWidget(widget)
             widget.deleteLater()
             message.display_widget = None
+            message.markdown_browser = None
         self.messages_changed.emit()
 
     def _redo_assistant_message(self, message: Message):
@@ -307,89 +323,88 @@ class MainPanelController(QObject):
         """Ask AppController to run the real agent for a response."""
         self.is_processing = True
         self.send_button.setEnabled(False)
+        self.begin_streaming_agent_turn()
         self.agent_turn_requested.emit()
 
-    def complete_agent_turn(self, content: str) -> None:
-        """Append the agent's final response and re-enable input."""
-        if content:
-            self.add_message(Message(role="assistant", content=content))
+    def begin_streaming_agent_turn(self) -> None:
+        """Create a placeholder assistant message for streamed output."""
+        self._streaming_tool_calls = []
+        self._streaming_message = Message(role="assistant", content="")
+        self.add_message(self._streaming_message)
+
+    def append_agent_text_delta(self, delta: str) -> None:
+        """Append streamed assistant text and schedule a markdown refresh."""
+        if not self._streaming_message or not delta:
+            return
+        self._streaming_message.content += delta
+        self._schedule_streaming_markdown_update()
+
+    def record_agent_tool_call_started(
+        self,
+        name: str,
+        arguments: str,
+        call_id: str,
+    ) -> None:
+        """Track tool execution metadata for future collapsible UI."""
+        self._streaming_tool_calls.append(
+            {
+                "id": call_id,
+                "name": name,
+                "arguments": arguments,
+            }
+        )
+
+    def record_agent_tool_result(self, call_id: str, output: str) -> None:
+        """Attach tool output to the in-flight turn metadata."""
+        for tool_call in self._streaming_tool_calls:
+            if tool_call.get("id") == call_id:
+                tool_call["result"] = output
+                break
+
+    def complete_streaming_agent_turn(
+        self,
+        content: str,
+        tool_calls: list,
+    ) -> None:
+        """Finalize the streaming assistant message."""
+        if self._streaming_message is not None:
+            self._streaming_message.content = content
+            self._streaming_message.tool_calls = tool_calls or self._streaming_tool_calls
+            self._flush_streaming_markdown(force=True)
+        self._streaming_message = None
+        self._streaming_tool_calls = []
         self._finish_agent_turn()
+        self.messages_changed.emit()
 
     def fail_agent_turn(self, error: str) -> None:
         """Show an agent failure in the conversation."""
-        self.add_message(
-            Message(role="assistant", content=f"Error: {error}")
-        )
+        if self._streaming_message is not None:
+            self._streaming_message.content = f"Error: {error}"
+            self._flush_streaming_markdown(force=True)
+            self._streaming_message = None
+            self._streaming_tool_calls = []
+        else:
+            self.add_message(
+                Message(role="assistant", content=f"Error: {error}")
+            )
         self._finish_agent_turn()
 
     def _finish_agent_turn(self) -> None:
         self.is_processing = False
         self.send_button.setEnabled(True)
 
-    def create_markdown_widget(self, content: str, colors: dict) -> QWidget:
-        """Create a widget for displaying markdown content."""
-        container = QWidget()
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
-        cp = colors
+    def _schedule_streaming_markdown_update(self) -> None:
+        self._markdown_update_timer.start(self.MARKDOWN_DEBOUNCE_MS)
 
-        lines = content.split('\n')
-        for line in lines:
-            if line.startswith('# '):
-                label = QLabel(f"<b>{line[2:]}</b>")
-                label.setStyleSheet(
-                    f"font-size: 18px; font-weight: bold; margin: 4px 0; "
-                    f"color: {cp['text_primary']}; background: transparent;"
-                )
-                label.setWordWrap(True)
-                layout.addWidget(label)
-            elif line.startswith('## '):
-                label = QLabel(f"<b>{line[3:]}</b>")
-                label.setStyleSheet(
-                    f"font-size: 16px; font-weight: bold; margin: 4px 0; "
-                    f"color: {cp['text_primary']}; background: transparent;"
-                )
-                label.setWordWrap(True)
-                layout.addWidget(label)
-            elif re.match(r'^\d+\.\s', line):
-                label = QLabel(line)
-                label.setStyleSheet(
-                    f"margin-left: 8px; margin-bottom: 2px; "
-                    f"color: {cp['text_primary']}; background: transparent;"
-                )
-                label.setWordWrap(True)
-                layout.addWidget(label)
-            elif line.startswith('- '):
-                label = QLabel(f"\u2022 {line[2:]}")
-                label.setStyleSheet(
-                    f"margin-left: 15px; margin-bottom: 2px; "
-                    f"color: {cp['text_primary']}; background: transparent;"
-                )
-                label.setWordWrap(True)
-                layout.addWidget(label)
-            elif line.startswith('```'):
-                code_label = QLabel(f"<pre>{line[3:]}</pre>")
-                code_label.setStyleSheet(f"""
-                    background-color: {cp['code_bg']};
-                    color: {cp['code_text']};
-                    border: 1px solid {cp['border']};
-                    border-radius: 4px;
-                    padding: 8px;
-                    font-family: monospace;
-                    font-size: 12px;
-                """)
-                code_label.setWordWrap(True)
-                layout.addWidget(code_label)
-            elif line.strip():
-                label = QLabel(line)
-                label.setStyleSheet(
-                    f"color: {cp['text_primary']}; background: transparent;"
-                )
-                label.setWordWrap(True)
-                layout.addWidget(label)
-
-        return container
+    def _flush_streaming_markdown(self, force: bool = False) -> None:
+        if not force:
+            self._markdown_update_timer.stop()
+        message = self._streaming_message
+        browser = getattr(message, "markdown_browser", None) if message else None
+        if message is None or browser is None:
+            return
+        update_markdown_widget(browser, message.content, self.colors)
+        self.scroll_to_bottom()
 
     def apply_theme(self, theme_name: str):
         self.colors = get_colors(theme_name)
@@ -397,6 +412,8 @@ class MainPanelController(QObject):
 
         saved = self.messages[:]
         self.messages = []
+        self._streaming_message = None
+        self._streaming_tool_calls = []
         while self.message_layout.count() > 0:
             item = self.message_layout.takeAt(0)
             if item.widget():
@@ -406,6 +423,7 @@ class MainPanelController(QObject):
 
         for msg in saved:
             msg.display_widget = None
+            msg.markdown_browser = None
             self.messages.append(msg)
             self.display_message(msg)
 
