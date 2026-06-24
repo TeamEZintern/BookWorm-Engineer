@@ -11,6 +11,7 @@ from .validation import _load_validated_or_initial_code,_run_validation,Validati
 from ..llm import complete_with_retry
 
 MAX_VALIDATION_ATTEMPTS = 6
+JSON_MAX_ATTEMPTS = 3
 
 def _llm(client: OpenAI, config: Config, system: str, user: str) -> str:
     response = complete_with_retry(
@@ -23,6 +24,46 @@ def _llm(client: OpenAI, config: Config, system: str, user: str) -> str:
     )
     return response.choices[0].message.content or ""
 
+def _llm_json(client: OpenAI, config: Config, system: str, user: str, *,stage_name:str, max_attempts: int = JSON_MAX_ATTEMPTS) -> tuple[dict, str]:
+    """
+    Call the LLM expecting a JSON object. On a parse failure, feed the bad output back with a corrective message
+    and re-roll(content-level retry).
+    This is separate from complete_with_retry (transport-level retry): 
+        each attempt here still goes through complete_with_retry, so transient HTTP failures are handled underneath.
+    Returns (parsed dict, raw_text_that_parsed).
+    """
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+    last_error = ""
+
+    for attempt in range(1, max_attempts + 1): 
+        response = complete_with_retry(
+            client=client, 
+            model=config.llm_model,
+            messages=messages
+        )
+        raw = response.choices[0].message.content or ""
+
+        try: 
+            return _extract_json(raw), raw
+        except (json.JSONDecodeError, ValueError) as exc:
+            last_error = str(exc)
+            print(f" {stage_name}: invalid JSON (attempt {attempt}/{max_attempts} - re-rolling...)")
+            messages.append({"role": "assistant", "content": raw})
+            messages.append({
+                "role": "user",
+                "content": (
+                    f"Your previous response could not be parsed as JSON ({last_error})"
+                    f"Reply with ONLY one valid JSON object - no prose, no markdown fences, and no array(`[...]`) at the top level"
+                )
+            })
+    
+    raise ValueError(
+        f"{stage_name}: model did not return valid JSON after {max_attempts} attempts"
+        f"(last error: {last_error})"
+    )
 
 def _fix_escapes(text: str) -> str:
     # Replace backslashes not part of a valid JSON escape with a literal \\
@@ -290,18 +331,16 @@ def run_pipeline(
     success_criteria_raw = artifacts.load(artifacts_dir,"success_criteria.json")
     if success_criteria_raw is None:
         print("Planning: success criteria...")
-        raw = _llm(
-            client,
-            config,
-            prompts.SUCCESS_CRITERIA_SYSTEM,
-            prompts.success_criteria_prompt(paper_text, overall_plan),
-        )
-
         try:
-            success_criteria = _extract_json(raw)
-        except (json.JSONDecodeError, ValueError) as exc:
-            return f"Failed to parse success criteria JSON: {exc}\n\nRaw response:\n{raw}"
-
+            success_criteria, _ = _llm_json(
+                client,
+                config,
+                prompts.SUCCESS_CRITERIA_SYSTEM,
+                prompts.success_criteria_prompt(paper_text, overall_plan),
+                stage_name="success criteria"
+            )
+        except ValueError as exc: 
+            return f"PIPELINE FAILED: {exc}"
         success_criteria_raw = json.dumps(success_criteria, indent=2)
         artifacts.save(artifacts_dir, "success_criteria.json",success_criteria_raw)
 
@@ -309,33 +348,43 @@ def run_pipeline(
     architecture_raw = artifacts.load(artifacts_dir, "architecture.txt")
     if architecture_raw is None:
         print("Planning: architecture...")
-        architecture_raw = _llm(
-            client, config,
-            prompts.PLANNING_SYSTEM,
-            prompts.architecture_prompt(paper_text, overall_plan,success_criteria_raw),
-        )
+        try: 
+            architecture, architecture_raw = _llm_json(
+                client, 
+                config,
+                prompts.PLANNING_SYSTEM,
+                prompts.architecture_prompt(paper_text, overall_plan,success_criteria_raw),
+                stage_name="architecture",
+            )
+        except ValueError as exc:
+            return f"PIPELINE FAILED: {exc}" 
+        
         artifacts.save(artifacts_dir, "architecture.txt", architecture_raw)
-
-    try:
-        architecture = _extract_json(architecture_raw)
-    except (json.JSONDecodeError, ValueError) as exc:
-        return f"Failed to parse architecture JSON: {exc}\n\nRaw response:\n{architecture_raw}"
-
+    else:
+        try:
+            architecture = _extract_json(architecture_raw)
+        except (json.JSONDecodeError, ValueError) as exc:
+            return f"PIPELINE FAILED: cached architecture.txt is not valid JSON: {exc}"
+    
     # Stage 1d: Logic design
     logic_raw = artifacts.load(artifacts_dir, "logic_design.txt")
     if logic_raw is None:
         print("Planning: logic design...")
-        logic_raw = _llm(
-            client, config,
-            prompts.PLANNING_SYSTEM,
-            prompts.logic_design_prompt(paper_text, overall_plan, architecture_raw, success_criteria_raw),
-        )
+        try: 
+            logic, logic_raw = _llm_json(
+                client, config,
+                prompts.PLANNING_SYSTEM,
+                prompts.logic_design_prompt(paper_text, overall_plan, architecture_raw, success_criteria_raw),
+                stage_name="logic_design"
+            )
+        except ValueError as exc:
+            return f"PIPELINE FAILED: {exc}"
         artifacts.save(artifacts_dir, "logic_design.txt", logic_raw)
-
-    try:
-        logic = _extract_json(logic_raw)
-    except (json.JSONDecodeError, ValueError) as exc:
-        return f"Failed to parse logic design JSON: {exc}\n\nRaw response:\n{logic_raw}"
+    else:
+        try:
+            logic = _extract_json(logic_raw)
+        except (json.JSONDecodeError, ValueError) as exc:
+            return f"Failed to parse logic design JSON: {exc}\n\nRaw response:\n{logic_raw}"
 
     task_list: list[str] = logic.get("task_list", [])
     file_logic: dict[str, str] = logic.get("logic", {})
