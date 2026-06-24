@@ -26,7 +26,9 @@ def main() -> int:
         from PySide6.QtWidgets import QApplication
         from PySide6.QtCore import QTimer
         from .gui import AppController, GUIConfig
+        from .gui.qt_message_filter import install_gui_qt_message_filter
 
+        install_gui_qt_message_filter()
         app = QApplication(sys.argv)
         gui_config = GUIConfig.from_config(config)
         controller = AppController(config, gui_config)

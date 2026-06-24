@@ -88,16 +88,6 @@ class MainPanelController(QObject):
             and watched in (self.scroll_area, self.widget)
             and event.type() in (QEvent.Type.Show, QEvent.Type.Resize)
         ):
-            # #region agent log
-            from bookworm.debug_session_log import debug_log
-
-            debug_log(
-                "main_panel_controller.py:eventFilter",
-                "schedule refresh from event",
-                {"event": int(event.type())},
-                hypothesis_id="B",
-            )
-            # #endregion
             self._layout_refresh_timer.start()
         return super().eventFilter(watched, event)
 
@@ -115,7 +105,6 @@ class MainPanelController(QObject):
     def _do_refresh_message_layouts(self) -> None:
         """Recompute bubble widths and markdown heights after the panel is laid out."""
         max_width = self._message_content_max_width()
-        assistant_count = 0
         for message in self.messages:
             if message.role == "user":
                 bubble = getattr(message, "user_bubble", None)
@@ -124,27 +113,12 @@ class MainPanelController(QObject):
             elif message.role == "assistant":
                 browser = getattr(message, "markdown_browser", None)
                 if browser is not None:
-                    assistant_count += 1
                     update_markdown_widget(
                         browser,
                         message.content,
                         self.colors,
                         is_valid=lambda v=browser: v in self._active_markdown_views,
                     )
-        # #region agent log
-        from bookworm.debug_session_log import debug_log
-
-        debug_log(
-            "main_panel_controller.py:refresh_message_layouts",
-            "refresh layouts",
-            {
-                "max_width": max_width,
-                "assistant_count": assistant_count,
-                "active_views": len(self._active_markdown_views),
-            },
-            hypothesis_id="D",
-        )
-        # #endregion
         self.scroll_area.widget().updateGeometry()
 
     def _render_assistant_message(self, message: Message) -> None:
@@ -251,16 +225,6 @@ class MainPanelController(QObject):
         self._resize_message_input()
 
     def clear_messages(self):
-        # #region agent log
-        from bookworm.debug_session_log import debug_log
-
-        debug_log(
-            "main_panel_controller.py:clear_messages",
-            "clear messages",
-            {"active_views_before": len(self._active_markdown_views)},
-            hypothesis_id="E",
-        )
-        # #endregion
         self._active_markdown_views.clear()
         self.messages.clear()
         self._streaming_message = None
@@ -274,39 +238,23 @@ class MainPanelController(QObject):
 
     def load_messages(self, messages: List[Message]) -> None:
         """Replace the panel with a full message list (batch render after layout)."""
-        # #region agent log
-        from bookworm.debug_session_log import debug_log
-
-        debug_log(
-            "main_panel_controller.py:load_messages",
-            "load messages start",
-            {"count": len(messages)},
-            hypothesis_id="A",
-        )
-        # #endregion
         self._suppress_layout_refresh = True
         try:
             self.clear_messages()
             for message in messages:
                 self.messages.append(message)
                 self.display_message(message, render_markdown=False)
-        finally:
+        except Exception:
             self._suppress_layout_refresh = False
+            raise
         QTimer.singleShot(0, self._after_load_messages)
 
     def _after_load_messages(self) -> None:
-        # #region agent log
-        from bookworm.debug_session_log import debug_log
-
-        debug_log(
-            "main_panel_controller.py:_after_load_messages",
-            "load messages finish",
-            {"message_count": len(self.messages)},
-            hypothesis_id="A",
-        )
-        # #endregion
-        self.refresh_message_layouts()
-        self.scroll_to_bottom()
+        try:
+            self.refresh_message_layouts()
+            self.scroll_to_bottom()
+        finally:
+            self._suppress_layout_refresh = False
 
     def add_message(self, message: Message):
         """Add a message to the chat."""

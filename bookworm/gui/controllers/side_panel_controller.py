@@ -46,16 +46,6 @@ class _ChatItemClickFilter(QObject):
             if not isinstance(watched, QWidget):
                 return False
             if not self._frame.isAncestorOf(watched):
-                # #region agent log
-                from bookworm.debug_session_log import debug_log
-
-                debug_log(
-                    "side_panel_controller.py:_is_overflow_click",
-                    "skipped mapFrom - not in hierarchy",
-                    {"watched": type(watched).__name__},
-                    hypothesis_id="F",
-                )
-                # #endregion
                 return False
             pos = self._frame.mapFrom(watched, pos)
         return self._frame.childAt(pos) is self._overflow_button
@@ -247,16 +237,6 @@ class SidePanelController(QObject):
     def set_active_chat_id(self, chat_id: Optional[str]):
         if chat_id == self.active_chat_id:
             return
-        # #region agent log
-        from bookworm.debug_session_log import debug_log
-
-        debug_log(
-            "side_panel_controller.py:set_active_chat_id",
-            "update highlight only",
-            {"chat_id": chat_id},
-            hypothesis_id="F",
-        )
-        # #endregion
         self.active_chat_id = chat_id
         self._update_active_chat_highlight()
 

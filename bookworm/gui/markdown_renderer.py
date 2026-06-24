@@ -189,25 +189,10 @@ def update_markdown_widget(
     """Re-render markdown HTML and resize the widget."""
     from PySide6.QtCore import QTimer
 
-    from bookworm.debug_session_log import debug_log
-
     def apply() -> None:
-        valid = is_valid() if is_valid is not None else True
-        embedded = _is_embedded(view)
-        # #region agent log
-        debug_log(
-            "markdown_renderer.py:update_markdown_widget",
-            "apply markdown",
-            {
-                "valid": valid,
-                "embedded": embedded,
-                "has_parent": view.parent() is not None,
-                "content_len": len(content or ""),
-            },
-            hypothesis_id="C",
-        )
-        # #endregion
-        if not valid or not embedded:
+        if is_valid is not None and not is_valid():
+            return
+        if not _is_embedded(view):
             return
         _ensure_view_hooks(view)
         view.setHtml(render_markdown_html(content, colors))
