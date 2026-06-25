@@ -14,38 +14,44 @@ class CommandResult(enum.Enum):
 VALID_MODES = {"plan", "build", "research"}
 
 
-def _cmd_init(working_dir: Path) -> CommandResult:
+def _cmd_init(working_dir: Path, output: Callable[[str], None]) -> CommandResult:
     sources_dir = working_dir / ".bookworm" / "sources"
     index_dir = working_dir/".bookworm"/"index"
     sources_dir.mkdir(parents=True, exist_ok=True)
     index_dir.mkdir(parents=True, exist_ok=True)
-    print("Initialized .bookworm directory in the project root.\n")
+    output("Initialized .bookworm directory in the project root.")
     return CommandResult.HANDLED
 
 
-def _cmd_exit() -> CommandResult:
-    print("Exiting BookWorm Engineer. Goodbye!")
+def _cmd_exit(output: Callable[[str], None]) -> CommandResult:
+    output("Exiting BookWorm Engineer. Goodbye!")
     return CommandResult.EXIT
 
 
-def _cmd_help() -> CommandResult:
-    print(
+def _cmd_help(output: Callable[[str], None]) -> CommandResult:
+    output(
         "Commands:\n"
-        "  init                                — create .bookworm directory in the project\n"
-        "  mode switch <plan|build|research>  — change the agent's mode\n"
-        "  exit / quit                         — leave BookWorm Engineer\n"
-        "  help                                — show this message\n"
+        "  /init                         — create .bookworm directory in the project\n"
+        "  /mode <plan|build|research>   — change the agent's behavior mode\n"
+        "  /exit, /quit                  — leave BookWorm Engineer\n"
+        "  /help                         — show this message\n"
+        "\n"
+        "Special commands must start with '/' and cannot include extra text after "
+        "their expected arguments."
     )
     return CommandResult.HANDLED
 
 
-def _cmd_mode_switch(text: str, set_mode: Callable[[str], None]) -> CommandResult:
-    new_mode = text[12:].strip().lower()
+def _cmd_mode_switch(
+    new_mode: str,
+    set_mode: Callable[[str], None],
+    output: Callable[[str], None],
+) -> CommandResult:
     if new_mode in VALID_MODES:
         set_mode(new_mode)
-        print(f"Switched to {new_mode.capitalize()} mode.\n")
+        output(f"Switched to {new_mode.capitalize()} mode.")
     else:
-        print(f"Unknown mode '{new_mode}'. Available: {', '.join(sorted(VALID_MODES))}\n")
+        output(f"Unknown mode '{new_mode}'. Available: {', '.join(sorted(VALID_MODES))}.")
     return CommandResult.HANDLED
 
 
@@ -53,19 +59,42 @@ def handle_command(
     text: str,
     working_dir: Path,
     set_mode: Callable[[str], None],
+    output: Callable[[str], None] = print,
 ) -> CommandResult:
-    lowered = text.lower()
+    stripped = text.strip()
+    if not stripped.startswith("/"):
+        return CommandResult.NOT_A_COMMAND
 
-    if lowered in {"init"}:
-        return _cmd_init(working_dir)
+    parts = stripped[1:].split()
+    if not parts:
+        return CommandResult.NOT_A_COMMAND
 
-    if lowered in {"exit", "quit"}:
-        return _cmd_exit()
+    command = parts[0].lower()
+    args = parts[1:]
 
-    if lowered.startswith("mode switch "):
-        return _cmd_mode_switch(text, set_mode)
+    if command == "init":
+        if args:
+            output("Usage: /init")
+            return CommandResult.HANDLED
+        return _cmd_init(working_dir, output)
 
-    if lowered == "help":
-        return _cmd_help()
+    if command in {"exit", "quit"}:
+        if args:
+            output(f"Usage: /{command}")
+            return CommandResult.HANDLED
+        return _cmd_exit(output)
 
-    return CommandResult.NOT_A_COMMAND
+    if command == "mode":
+        if len(args) != 1:
+            output("Usage: /mode <plan|build|research>")
+            return CommandResult.HANDLED
+        return _cmd_mode_switch(args[0].lower(), set_mode, output)
+
+    if command == "help":
+        if args:
+            output("Usage: /help")
+            return CommandResult.HANDLED
+        return _cmd_help(output)
+
+    output(f"Unknown command '/{command}'. Type /help for available commands.")
+    return CommandResult.HANDLED

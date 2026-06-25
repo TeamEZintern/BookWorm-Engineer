@@ -66,13 +66,24 @@ class Ui_MainPanel(object):
 
         self.inputLayout.addWidget(self.messageInput)
 
-        self.sendButton = QPushButton(self.inputFrame)
-        self.sendButton.setObjectName(u"sendButton")
+        self.modeButton = QPushButton(self.inputFrame)
+        self.modeButton.setObjectName(u"modeButton")
         sizePolicy2 = QSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Ignored)
         sizePolicy2.setHorizontalStretch(0)
         sizePolicy2.setVerticalStretch(0)
-        sizePolicy2.setHeightForWidth(self.sendButton.sizePolicy().hasHeightForWidth())
-        self.sendButton.setSizePolicy(sizePolicy2)
+        sizePolicy2.setHeightForWidth(self.modeButton.sizePolicy().hasHeightForWidth())
+        self.modeButton.setSizePolicy(sizePolicy2)
+        self.modeButton.setMinimumSize(QSize(110, 28))
+
+        self.inputLayout.addWidget(self.modeButton)
+
+        self.sendButton = QPushButton(self.inputFrame)
+        self.sendButton.setObjectName(u"sendButton")
+        sizePolicy3 = QSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Ignored)
+        sizePolicy3.setHorizontalStretch(0)
+        sizePolicy3.setVerticalStretch(0)
+        sizePolicy3.setHeightForWidth(self.sendButton.sizePolicy().hasHeightForWidth())
+        self.sendButton.setSizePolicy(sizePolicy3)
         self.sendButton.setMinimumSize(QSize(80, 28))
 
         self.inputLayout.addWidget(self.sendButton)
@@ -88,6 +99,7 @@ class Ui_MainPanel(object):
 
     def retranslateUi(self, MainPanel):
         self.messageInput.setPlaceholderText(QCoreApplication.translate("MainPanel", u"Type a message...", None))
+        self.modeButton.setText(QCoreApplication.translate("MainPanel", u"Mode: Plan", None))
         self.sendButton.setText(QCoreApplication.translate("MainPanel", u"Send", None))
         pass
     # retranslateUi

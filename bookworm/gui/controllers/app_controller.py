@@ -14,6 +14,7 @@ from PySide6.QtCore import QObject, QTimer
 from PySide6.QtWidgets import QApplication, QMainWindow, QSplitter
 
 from bookworm.agent import Agent
+from bookworm.commands import CommandResult, handle_command
 from bookworm.llm import create_client
 from bookworm.prompts import build_system_prompt
 from bookworm.tools import create_tool_registry
@@ -72,6 +73,12 @@ class AppController(QObject):
         self.main_panel_controller.agent_turn_stop_requested.connect(
             self._on_agent_turn_stop_requested
         )
+        self.main_panel_controller.mode_change_requested.connect(
+            self._on_mode_change_requested
+        )
+        self.main_panel_controller.special_command_submitted.connect(
+            self._on_special_command_submitted
+        )
 
         self._ask_user_bridge = AskUserBridge(self.window)
         tool_registry = create_tool_registry(
@@ -84,6 +91,7 @@ class AppController(QObject):
             tool_registry=tool_registry,
             system_prompt=build_system_prompt(config),
         )
+        self.main_panel_controller.update_mode(self.agent.mode)
         self._agent_runner = AgentRunner(self)
         self._agent_runner.text_delta.connect(self._on_agent_text_delta)
         self._agent_runner.tool_call_started.connect(
@@ -262,6 +270,39 @@ class AppController(QObject):
     def _sync_agent_from_panel(self) -> None:
         """Align the backend agent with the visible chat history."""
         self.agent.load_conversation(self.main_panel_controller.get_message_dicts())
+
+    def _set_agent_mode(self, mode: str) -> None:
+        self.agent.set_mode(mode)
+        self.main_panel_controller.update_mode(mode)
+
+    def _on_mode_change_requested(self, mode: str) -> None:
+        if self._agent_runner.is_running():
+            self.window.statusBar().showMessage(
+                "Wait for the current response to finish before switching mode."
+            )
+            return
+        self._set_agent_mode(mode)
+        self.window.statusBar().showMessage(f"Mode: {mode.capitalize()}")
+
+    def _on_special_command_submitted(self, command_text: str) -> None:
+        output_messages: list[str] = []
+        result = handle_command(
+            text=command_text,
+            working_dir=self.config.working_dir,
+            set_mode=self._set_agent_mode,
+            output=output_messages.append,
+        )
+        if result == CommandResult.NOT_A_COMMAND:
+            return
+        if output_messages:
+            self.main_panel_controller.add_message(
+                Message(role="assistant", content="\n".join(output_messages))
+            )
+        if result == CommandResult.EXIT:
+            self._save_current_chat()
+            self.window.close()
+            return
+        self.window.statusBar().showMessage("Ready")
 
     def _on_agent_turn_requested(self) -> None:
         if self._agent_runner.is_running():

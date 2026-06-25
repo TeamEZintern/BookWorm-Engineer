@@ -71,7 +71,11 @@ class Agent:
         if self._cancel_requested:
             raise TurnCancelledError()
 
-    def _set_mode(self, mode: str) -> None:
+    @property
+    def mode(self) -> str:
+        return self._mode
+
+    def set_mode(self, mode: str) -> None:
         if mode not in VALID_MODES:
             raise ValueError(
                 f"Invalid mode '{mode}'. Valid modes: {', '.join(sorted(VALID_MODES))}"
@@ -85,7 +89,7 @@ class Agent:
     def _print_banner(self) -> None:
         print("\nHello I am BookWorm Engineer, your research and coding assistant.")
         print("How may I help you?")
-        print("Type 'exit' or 'quit' to stop.\n")
+        print("Type '/exit' or '/quit' to stop.\n")
 
     def _get_source_names(self) -> list[str]:
         if not self.sources_dir.is_dir():
@@ -125,7 +129,7 @@ class Agent:
             result = handle_command(
                 text=user_prompt,
                 working_dir=self.config.working_dir,
-                set_mode=self._set_mode,
+                set_mode=self.set_mode,
             )
             if result == CommandResult.EXIT:
                 return

@@ -17,10 +17,10 @@
 
 | Command | Action |
 |---|---|
-| `init` | Create `.bookworm/sources/` and `.bookworm/index/` in project |
-| `mode switch <plan\|build\|research>` | Change agent mode |
-| `exit` / `quit` | Exit agent |
-| `help` | Show command list |
+| `/init` | Create `.bookworm/sources/` and `.bookworm/index/` in project |
+| `/mode <plan\|build\|research>` | Change agent mode |
+| `/exit` / `/quit` | Exit agent |
+| `/help` | Show command list |
 
 ## Modes
 
