@@ -40,6 +40,9 @@ def validate_message_data(data: Any) -> None:
     tool_calls = data.get("tool_calls", [])
     if tool_calls is not None and not isinstance(tool_calls, list):
         raise ValueError("message tool_calls must be a list")
+    reasoning = data.get("reasoning", "")
+    if reasoning is not None and not isinstance(reasoning, str):
+        raise ValueError("message reasoning must be a string")
 
 
 def validate_chat_data(data: Any) -> None:

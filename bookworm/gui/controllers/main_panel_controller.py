@@ -6,13 +6,14 @@ rendering user bubbles, agent markdown, copy/redo actions, theme styling,
 and the input area. Wires widget signals via ``findChild()``.
 """
 
+import json
 from typing import List, Optional
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal, QEvent, QPoint
 from PySide6.QtGui import QGuiApplication, QTextCursor
 from PySide6.QtWidgets import (
     QWidget, QLabel, QScrollArea, QFrame, QTextEdit,
-    QPushButton, QVBoxLayout, QHBoxLayout, QSizePolicy, QMenu,
+    QPushButton, QVBoxLayout, QHBoxLayout, QSizePolicy, QMenu, QToolButton,
 )
 
 from ..markdown_renderer import create_markdown_view, update_markdown_widget
@@ -44,6 +45,7 @@ class MainPanelController(QObject):
         self._agent_turn_in_progress = False
         self._streaming_message: Optional[Message] = None
         self._streaming_tool_calls: list = []
+        self._streaming_reasoning = ""
         self._redo_buttons: List[QPushButton] = []
         self._suppress_layout_refresh = False
         self._active_markdown_views: set = set()
@@ -300,6 +302,7 @@ class MainPanelController(QObject):
         self.messages.clear()
         self._streaming_message = None
         self._streaming_tool_calls = []
+        self._streaming_reasoning = ""
         while self.message_layout.count() > 0:
             item = self.message_layout.takeAt(0)
             if item.widget():
@@ -372,6 +375,7 @@ class MainPanelController(QObject):
             self._remove_message(self._streaming_message)
             self._streaming_message = None
         self._streaming_tool_calls = []
+        self._streaming_reasoning = ""
         self._markdown_update_timer.stop()
         self.is_processing = False
         self._update_send_button()
@@ -381,6 +385,7 @@ class MainPanelController(QObject):
         self._markdown_update_timer.stop()
         self._streaming_message = None
         self._streaming_tool_calls = []
+        self._streaming_reasoning = ""
         self.is_processing = False
         self._update_send_button()
 
@@ -391,6 +396,7 @@ class MainPanelController(QObject):
                 continue
             self._streaming_message = message
             self._streaming_tool_calls = list(message.tool_calls or [])
+            self._streaming_reasoning = message.reasoning or ""
             self.is_processing = True
             self._update_send_button()
             self._flush_streaming_markdown(force=True)
@@ -466,6 +472,12 @@ class MainPanelController(QObject):
         message.markdown_browser = browser
         layout.addWidget(browser)
 
+        metadata_layout = QVBoxLayout()
+        metadata_layout.setSpacing(6)
+        message.metadata_layout = metadata_layout
+        layout.addLayout(metadata_layout)
+        self._refresh_assistant_metadata(message)
+
         actions = QHBoxLayout()
         actions.setSpacing(8)
         copy_btn = QPushButton("\U0001f4cb Copy")
@@ -490,6 +502,115 @@ class MainPanelController(QObject):
         layout.addLayout(actions)
 
         return container
+
+    def _clear_layout(self, layout: QVBoxLayout) -> None:
+        while layout.count() > 0:
+            item = layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+            elif item.layout():
+                self._clear_layout(item.layout())
+
+    def _style_detail_text(self, text_view: QTextEdit) -> None:
+        c = self.colors
+        text_view.setReadOnly(True)
+        text_view.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {c['bg_secondary']};
+                color: {c['text_primary']};
+                border: 1px solid {c['border']};
+                border-radius: 4px;
+                padding: 6px;
+                font-family: monospace;
+                font-size: 12px;
+            }}
+        """)
+
+    def _detail_height(self, text: str) -> int:
+        line_count = max(2, min(12, text.count("\n") + 1))
+        return min(220, line_count * self.message_input.fontMetrics().lineSpacing() + 24)
+
+    def _create_collapsible_detail(self, title: str, body: str) -> QWidget:
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        toggle = QToolButton()
+        toggle.setText(title)
+        toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        toggle.setArrowType(Qt.ArrowType.RightArrow)
+        toggle.setCheckable(True)
+        toggle.setChecked(False)
+        toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        toggle.setStyleSheet(f"""
+            QToolButton {{
+                background-color: transparent;
+                color: {self.colors['text_secondary']};
+                border: none;
+                padding: 2px 0;
+                font-weight: bold;
+            }}
+            QToolButton:hover {{
+                color: {self.colors['text_primary']};
+            }}
+        """)
+
+        detail = QTextEdit()
+        self._style_detail_text(detail)
+        detail.setPlainText(body)
+        detail.setFixedHeight(self._detail_height(body))
+        detail.setVisible(False)
+
+        toggle.toggled.connect(
+            lambda checked: (
+                toggle.setArrowType(
+                    Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow
+                ),
+                detail.setVisible(checked),
+                self.refresh_message_layouts(),
+            )
+        )
+
+        layout.addWidget(toggle)
+        layout.addWidget(detail)
+        return container
+
+    def _format_jsonish_text(self, text: str) -> str:
+        stripped = (text or "").strip()
+        if not stripped:
+            return "{}"
+        try:
+            return json.dumps(json.loads(stripped), indent=2)
+        except json.JSONDecodeError:
+            return stripped
+
+    def _format_tool_call_detail(self, tool_call: dict) -> str:
+        arguments = self._format_jsonish_text(tool_call.get("arguments", ""))
+        result = tool_call.get("result")
+        result_text = result if result not in (None, "") else "Running..."
+        return f"Arguments:\n{arguments}\n\nResult:\n{result_text}"
+
+    def _refresh_assistant_metadata(self, message: Message) -> None:
+        metadata_layout = getattr(message, "metadata_layout", None)
+        if metadata_layout is None:
+            return
+        self._clear_layout(metadata_layout)
+
+        if message.reasoning.strip():
+            metadata_layout.addWidget(
+                self._create_collapsible_detail("Reasoning", message.reasoning.strip())
+            )
+
+        for index, tool_call in enumerate(message.tool_calls, start=1):
+            name = tool_call.get("name") or tool_call.get("function", {}).get("name", "tool")
+            status = "done" if tool_call.get("result") not in (None, "") else "running"
+            metadata_layout.addWidget(
+                self._create_collapsible_detail(
+                    f"Tool {index}: {name} ({status})",
+                    self._format_tool_call_detail(tool_call),
+                )
+            )
 
     def _style_action_button(self, button: QPushButton):
         c = self.colors
@@ -528,6 +649,7 @@ class MainPanelController(QObject):
             widget.deleteLater()
             message.display_widget = None
             message.markdown_browser = None
+            message.metadata_layout = None
         self.messages_changed.emit()
 
     def _redo_assistant_message(self, message: Message):
@@ -554,6 +676,7 @@ class MainPanelController(QObject):
     def begin_streaming_agent_turn(self) -> None:
         """Create a placeholder assistant message for streamed output."""
         self._streaming_tool_calls = []
+        self._streaming_reasoning = ""
         self._streaming_message = Message(role="assistant", content="")
         self.add_message(self._streaming_message)
 
@@ -563,6 +686,14 @@ class MainPanelController(QObject):
             return
         self._streaming_message.content += delta
         self._schedule_streaming_markdown_update()
+
+    def append_agent_reasoning_delta(self, delta: str) -> None:
+        """Append streamed reasoning text into the assistant metadata section."""
+        if not self._streaming_message or not delta:
+            return
+        self._streaming_reasoning += delta
+        self._streaming_message.reasoning = self._streaming_reasoning
+        self._refresh_assistant_metadata(self._streaming_message)
 
     def record_agent_tool_call_started(
         self,
@@ -578,6 +709,9 @@ class MainPanelController(QObject):
                 "arguments": arguments,
             }
         )
+        if self._streaming_message is not None:
+            self._streaming_message.tool_calls = self._streaming_tool_calls
+            self._refresh_assistant_metadata(self._streaming_message)
 
     def record_agent_tool_result(self, call_id: str, output: str) -> None:
         """Attach tool output to the in-flight turn metadata."""
@@ -585,19 +719,26 @@ class MainPanelController(QObject):
             if tool_call.get("id") == call_id:
                 tool_call["result"] = output
                 break
+        if self._streaming_message is not None:
+            self._streaming_message.tool_calls = self._streaming_tool_calls
+            self._refresh_assistant_metadata(self._streaming_message)
 
     def complete_streaming_agent_turn(
         self,
         content: str,
         tool_calls: list,
+        reasoning: str = "",
     ) -> None:
         """Finalize the streaming assistant message."""
         if self._streaming_message is not None:
             self._streaming_message.content = content
             self._streaming_message.tool_calls = tool_calls or self._streaming_tool_calls
+            self._streaming_message.reasoning = reasoning or self._streaming_reasoning
             self._flush_streaming_markdown(force=True)
+            self._refresh_assistant_metadata(self._streaming_message)
         self._streaming_message = None
         self._streaming_tool_calls = []
+        self._streaming_reasoning = ""
         self._finish_agent_turn()
         self.messages_changed.emit()
 
@@ -609,9 +750,12 @@ class MainPanelController(QObject):
                 self._remove_message(self._streaming_message)
             else:
                 self._streaming_message.tool_calls = self._streaming_tool_calls
+                self._streaming_message.reasoning = self._streaming_reasoning
                 self._flush_streaming_markdown(force=True)
+                self._refresh_assistant_metadata(self._streaming_message)
         self._streaming_message = None
         self._streaming_tool_calls = []
+        self._streaming_reasoning = ""
         self._finish_agent_turn()
         self.messages_changed.emit()
 
@@ -631,6 +775,7 @@ class MainPanelController(QObject):
             self._flush_streaming_markdown(force=True)
             self._streaming_message = None
             self._streaming_tool_calls = []
+            self._streaming_reasoning = ""
         else:
             self.add_message(
                 Message(role="assistant", content=f"Error: {error}")
@@ -669,6 +814,7 @@ class MainPanelController(QObject):
         self._redo_buttons.clear()
         self._streaming_message = None
         self._streaming_tool_calls = []
+        self._streaming_reasoning = ""
         self._active_markdown_views.clear()
         self._suppress_layout_refresh = True
         try:

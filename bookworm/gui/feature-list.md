@@ -86,7 +86,7 @@ Agent responses rendered as formatted markdown
 - [x] Markdown parsing from raw LLM output
 - [x] Advanced format render
 - [ ] Collapsible sections for tool execution and thinking/reasoning
-  - Agent event protocol (`text_delta`, `tool_call_*`, `reasoning_delta`) is wired; UI widgets are next.
+  - [ ] Wire Agent event protocol (`text_delta`, `tool_call_*`, `reasoning_delta`); tool calls and reasoning render as collapsed assistant-message detail sections.
 - [x] Copy and Redo buttons at the bottom.
   - Copy means to copy the raw markdown of the agent output.
   - Redo means re-prompting the agent with the same user input to get a new response, often because the original output had a glitch or the user was not satisfied with it.
