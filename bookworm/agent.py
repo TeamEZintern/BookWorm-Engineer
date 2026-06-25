@@ -1,15 +1,44 @@
-import json
 import time
 from typing import Any
 
 from openai import OpenAI
 
+from .agent_events import TurnCancelledError, TurnEventHandler
 from .commands import VALID_MODES, CommandResult, handle_command
 from .config import Config
 from .prompts import build_system_prompt
 from .tools import ToolRegistry, call_tool
 
 HALLUNCINATION_THRESHOLD = 0.75
+
+
+def _api_tool_calls_from_gui(tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert GUI-persisted tool metadata to OpenAI API tool_calls shape."""
+    api_calls: list[dict[str, Any]] = []
+    for tool_call in tool_calls:
+        if "function" in tool_call:
+            api_calls.append(
+                {
+                    "id": tool_call["id"],
+                    "type": tool_call.get("type", "function"),
+                    "function": {
+                        "name": tool_call["function"]["name"],
+                        "arguments": tool_call["function"]["arguments"],
+                    },
+                }
+            )
+            continue
+        api_calls.append(
+            {
+                "id": tool_call["id"],
+                "type": "function",
+                "function": {
+                    "name": tool_call["name"],
+                    "arguments": tool_call.get("arguments", "{}"),
+                },
+            }
+        )
+    return api_calls
 
 
 class Agent:
@@ -28,6 +57,18 @@ class Agent:
             {"role": "system", "content": system_prompt}
         ]
         self.sources_dir = self.config.working_dir / ".bookworm" / "sources"
+        self._cancel_requested = False
+
+    def request_cancel(self) -> None:
+        """Ask the current turn to stop at the next safe checkpoint."""
+        self._cancel_requested = True
+
+    def clear_cancel(self) -> None:
+        self._cancel_requested = False
+
+    def _check_cancelled(self) -> None:
+        if self._cancel_requested:
+            raise TurnCancelledError()
 
     def _set_mode(self, mode: str) -> None:
         if mode not in VALID_MODES:
@@ -89,84 +130,290 @@ class Agent:
             self.messages.append({"role":"user", "content": user_prompt})
             start_time = time.time()
 
-            try: 
-                response_text = self._run_turn()
-            except Exception as exc: 
+            try:
+                response_text = self.run_turn()
+            except Exception as exc:
                 raise RuntimeError(f"Failed to generate response: {exc}") from exc
-            
+
             print(f"\n{response_text}\n")
             elapsed = time.time() - start_time
             hours, remainder = divmod(elapsed, 3600)
             minutes, seconds = divmod(remainder, 60)
             print(f"Time taken: {int(hours):02}:{int(minutes):02}:{seconds:05.2f}\n")
 
-    def _run_turn(self) -> str:
-        while True:
-            response = self.client.chat.completions.create(
-                model=self.config.llm_model,
-                messages=self.messages,
-                tools=self.tool_registry.schema,
-                tool_choice="auto",
-                extra_body={
-                    "reasoning": {
-                        "effort": "low",  # options: "low" | "medium" | "high"
-                    }
-                },
+    def load_conversation(self, chat_messages: list[dict[str, Any]]) -> None:
+        """Rebuild agent history from persisted GUI chat messages."""
+        self.messages = [
+            {"role": "system", "content": build_system_prompt(self.config, self._mode)}
+        ]
+        for message in chat_messages:
+            role = message.get("role")
+            if role not in {"user", "assistant"}:
+                continue
+            api_message: dict[str, Any] = {
+                "role": role,
+                "content": message.get("content", ""),
+            }
+            tool_calls = message.get("tool_calls") or []
+            if tool_calls:
+                api_message["tool_calls"] = _api_tool_calls_from_gui(tool_calls)
+            self.messages.append(api_message)
+            if role == "assistant":
+                for tool_call in tool_calls:
+                    result = tool_call.get("result")
+                    call_id = tool_call.get("id")
+                    if result is None or not call_id:
+                        continue
+                    self.messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call_id,
+                            "content": result,
+                        }
+                    )
+
+    def run_turn(self, event_handler: TurnEventHandler | None = None) -> str:
+        """Run one agent turn until the model returns a final assistant message."""
+        return self.run_turn_with_events(event_handler)
+
+    def run_turn_with_events(
+        self,
+        event_handler: TurnEventHandler | None = None,
+    ) -> str:
+        """Run one agent turn, optionally emitting progress events."""
+        self.clear_cancel()
+        try:
+            return self._run_turn(event_handler)
+        except TurnCancelledError:
+            raise
+        except Exception as exc:
+            if event_handler and event_handler.on_error:
+                event_handler.on_error(str(exc))
+            raise
+
+    def _build_completion_kwargs(self) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {
+            "model": self.config.llm_model,
+            "messages": self.messages,
+            "tools": self.tool_registry.schema,
+            "tool_choice": "auto",
+        }
+        if "openrouter.ai" in self.config.llm_base_url:
+            kwargs["extra_body"] = {
+                "reasoning": {
+                    "effort": "low",
+                }
+            }
+        return kwargs
+
+    def _append_context_warning(self, usage: Any) -> None:
+        if usage is None:
+            return
+        context_used = usage.prompt_tokens / self.config.context_window
+        if context_used >= HALLUNCINATION_THRESHOLD:
+            self.messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        f" WARNING: {context_used: .2%} of context window used."
+                        "Conclude this processing loop as soon as possible"
+                    ),
+                }
             )
 
-            reply = response.choices[0].message
+    def _run_turn(self, event_handler: TurnEventHandler | None = None) -> str:
+        turn_tool_calls: list[dict[str, Any]] = []
 
-            assistant_message: dict[str,Any] = {
-                "role" : "assistant",
-                "content" : reply.content or "",
-            }
+        while True:
+            self._check_cancelled()
+            if event_handler is None:
+                final_content = self._run_non_streaming_leg(turn_tool_calls, event_handler)
+            else:
+                final_content = self._run_streaming_leg(turn_tool_calls, event_handler)
 
-            if reply.tool_calls:
-                assistant_message["tool_calls"] = [
-                    {
-                        "id" : tool_call.id,
-                        "type" : tool_call.type,
-                        "function" : {
-                            "name" : tool_call.function.name,
-                            "arguments": tool_call.function.arguments,
-                        },
-                    }
-                    for tool_call in reply.tool_calls
-                ]
-            
-            self.messages.append(assistant_message)
+            if final_content is not None:
+                if event_handler and event_handler.on_turn_complete:
+                    event_handler.on_turn_complete(final_content, turn_tool_calls)
+                return final_content
 
-            if not reply.tool_calls:
-                return reply.content or ""
-            
-            for tool_call in reply.tool_calls:
-                tool_name = tool_call.function.name
-                tool_arguments = tool_call.function.arguments
+    def _run_non_streaming_leg(
+        self,
+        turn_tool_calls: list[dict[str, Any]],
+        event_handler: TurnEventHandler | None,
+    ) -> str | None:
+        response = self.client.chat.completions.create(**self._build_completion_kwargs())
+        reply = response.choices[0].message
 
-                tool_result = call_tool(
-                    registry=self.tool_registry,
-                    name=tool_name,
-                    arguments_json=tool_arguments,
+        assistant_message: dict[str, Any] = {
+            "role": "assistant",
+            "content": reply.content or "",
+        }
+
+        if reply.tool_calls:
+            assistant_message["tool_calls"] = [
+                {
+                    "id": tool_call.id,
+                    "type": tool_call.type,
+                    "function": {
+                        "name": tool_call.function.name,
+                        "arguments": tool_call.function.arguments,
+                    },
+                }
+                for tool_call in reply.tool_calls
+            ]
+
+        self.messages.append(assistant_message)
+
+        if not reply.tool_calls:
+            return reply.content or ""
+
+        for tool_call in reply.tool_calls:
+            self._execute_tool_call(
+                tool_call.id,
+                tool_call.function.name,
+                tool_call.function.arguments,
+                turn_tool_calls,
+                event_handler,
+            )
+            self._append_context_warning(response.usage)
+
+        return None
+
+    def _run_streaming_leg(
+        self,
+        turn_tool_calls: list[dict[str, Any]],
+        event_handler: TurnEventHandler,
+    ) -> str | None:
+        kwargs = self._build_completion_kwargs()
+        kwargs["stream"] = True
+
+        stream = self.client.chat.completions.create(**kwargs)
+
+        content_parts: list[str] = []
+        tool_calls_acc: dict[int, dict[str, Any]] = {}
+        usage = None
+
+        try:
+            for chunk in stream:
+                self._check_cancelled()
+                if not chunk.choices:
+                    continue
+
+                delta = chunk.choices[0].delta
+
+                reasoning_text = getattr(delta, "reasoning", None) or getattr(
+                    delta, "reasoning_content", None
                 )
+                if reasoning_text and event_handler.on_reasoning_delta:
+                    event_handler.on_reasoning_delta(reasoning_text)
 
-                self.messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id" : tool_call.id,
-                        "content": tool_result,
-                    }
-                )
+                if delta.content:
+                    content_parts.append(delta.content)
+                    if event_handler.on_text_delta:
+                        event_handler.on_text_delta(delta.content)
 
-                if response.usage is not None: 
-                    context_used = response.usage.prompt_tokens / self.config.context_window
-
-                    if context_used >= HALLUNCINATION_THRESHOLD:
-                        self.messages.append(
-                            {
-                                "role" : "system",
-                                "content" : (
-                                    f" WARNING: {context_used: .2%} of context window used."
-                                    "Conclude this processing loop as soon as possible"
-                                ),
+                if delta.tool_calls:
+                    for tool_call_delta in delta.tool_calls:
+                        index = tool_call_delta.index
+                        if index not in tool_calls_acc:
+                            tool_calls_acc[index] = {
+                                "id": "",
+                                "type": "function",
+                                "function": {"name": "", "arguments": ""},
                             }
-                        )
+                        accumulated = tool_calls_acc[index]
+                        if tool_call_delta.id:
+                            accumulated["id"] = tool_call_delta.id
+                        if tool_call_delta.function:
+                            if tool_call_delta.function.name:
+                                accumulated["function"]["name"] += tool_call_delta.function.name
+                            if tool_call_delta.function.arguments:
+                                accumulated["function"]["arguments"] += (
+                                    tool_call_delta.function.arguments
+                                )
+
+                if getattr(chunk, "usage", None) is not None:
+                    usage = chunk.usage
+        except TurnCancelledError:
+            self._append_partial_streaming_assistant(content_parts, tool_calls_acc)
+            raise
+
+        final_content = "".join(content_parts)
+        tool_calls_list = [tool_calls_acc[index] for index in sorted(tool_calls_acc)]
+
+        assistant_message: dict[str, Any] = {
+            "role": "assistant",
+            "content": final_content,
+        }
+        if tool_calls_list:
+            assistant_message["tool_calls"] = tool_calls_list
+
+        self.messages.append(assistant_message)
+
+        if not tool_calls_list:
+            return final_content
+
+        for tool_call in tool_calls_list:
+            self._execute_tool_call(
+                tool_call["id"],
+                tool_call["function"]["name"],
+                tool_call["function"]["arguments"],
+                turn_tool_calls,
+                event_handler,
+            )
+            self._append_context_warning(usage)
+
+        return None
+
+    def _append_partial_streaming_assistant(
+        self,
+        content_parts: list[str],
+        tool_calls_acc: dict[int, dict[str, Any]],
+    ) -> None:
+        """Persist streamed assistant text when a turn is stopped mid-stream."""
+        final_content = "".join(content_parts)
+        if not final_content:
+            return
+        assistant_message: dict[str, Any] = {
+            "role": "assistant",
+            "content": final_content,
+        }
+        self.messages.append(assistant_message)
+
+    def _execute_tool_call(
+        self,
+        call_id: str,
+        tool_name: str,
+        tool_arguments: str,
+        turn_tool_calls: list[dict[str, Any]],
+        event_handler: TurnEventHandler | None,
+    ) -> None:
+        self._check_cancelled()
+        if event_handler and event_handler.on_tool_call_started:
+            event_handler.on_tool_call_started(tool_name, tool_arguments, call_id)
+
+        tool_result = call_tool(
+            registry=self.tool_registry,
+            name=tool_name,
+            arguments_json=tool_arguments,
+        )
+
+        turn_tool_calls.append(
+            {
+                "id": call_id,
+                "name": tool_name,
+                "arguments": tool_arguments,
+                "result": tool_result,
+            }
+        )
+
+        if event_handler and event_handler.on_tool_result:
+            event_handler.on_tool_result(call_id, tool_result)
+
+        self.messages.append(
+            {
+                "role": "tool",
+                "tool_call_id": call_id,
+                "content": tool_result,
+            }
+        )

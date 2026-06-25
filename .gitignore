@@ -4,8 +4,10 @@
 tests/.pytest-tmp/
 tests/pytest_tmp/
 tests/_scratch/
-.env
+.env*
 __pycache__/
 venv/
 *.egg-info/
 reference/
+src/
+debug/
