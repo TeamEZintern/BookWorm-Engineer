@@ -6,6 +6,7 @@ from openai import OpenAI
 from .agent_events import TurnCancelledError, TurnEventHandler
 from .commands import VALID_MODES, CommandResult, handle_command
 from .config import Config
+from .llm import complete_with_retry
 from .prompts import build_system_prompt
 from .tools import ToolRegistry, call_tool
 
@@ -76,7 +77,10 @@ class Agent:
                 f"Invalid mode '{mode}'. Valid modes: {', '.join(sorted(VALID_MODES))}"
             )
         self._mode = mode
-        self.messages[0] = {"role": "system", "content": build_system_prompt(self.config, mode)}
+        self.messages[0] = {
+            "role": "system",
+            "content": build_system_prompt(self.config, mode),
+        }
 
     def _print_banner(self) -> None:
         print("\nHello I am BookWorm Engineer, your research and coding assistant.")
@@ -88,7 +92,8 @@ class Agent:
             return []
         try:
             return sorted(
-                f.name for f in self.sources_dir.iterdir()
+                f.name
+                for f in self.sources_dir.iterdir()
                 if f.is_file() and f.suffix.lower() in {".pdf", ".txt", ".md"}
             )
         except OSError:
@@ -120,20 +125,23 @@ class Agent:
             result = handle_command(
                 text=user_prompt,
                 working_dir=self.config.working_dir,
-                set_mode=self._set_mode
+                set_mode=self._set_mode,
             )
             if result == CommandResult.EXIT:
                 return
             if result == CommandResult.HANDLED:
                 continue
 
-            self.messages.append({"role":"user", "content": user_prompt})
+            checkpoint = len(self.messages)
+            self.messages.append({"role": "user", "content": user_prompt})
             start_time = time.time()
 
             try:
                 response_text = self.run_turn()
             except Exception as exc:
-                raise RuntimeError(f"Failed to generate response: {exc}") from exc
+                del self.messages[checkpoint:]
+                print(f"\n[error] Could not complete that request: {exc}\n")
+                continue
 
             print(f"\n{response_text}\n")
             elapsed = time.time() - start_time
@@ -206,6 +214,12 @@ class Agent:
             }
         return kwargs
 
+    def _request_completion(self, **overrides: Any) -> Any:
+        """Call the LLM with retry policy from llm.py."""
+        kwargs = self._build_completion_kwargs()
+        kwargs.update(overrides)
+        return complete_with_retry(client=self.client, **kwargs)
+
     def _append_context_warning(self, usage: Any) -> None:
         if usage is None:
             return
@@ -241,7 +255,7 @@ class Agent:
         turn_tool_calls: list[dict[str, Any]],
         event_handler: TurnEventHandler | None,
     ) -> str | None:
-        response = self.client.chat.completions.create(**self._build_completion_kwargs())
+        response = self._request_completion()
         reply = response.choices[0].message
 
         assistant_message: dict[str, Any] = {
@@ -284,10 +298,7 @@ class Agent:
         turn_tool_calls: list[dict[str, Any]],
         event_handler: TurnEventHandler,
     ) -> str | None:
-        kwargs = self._build_completion_kwargs()
-        kwargs["stream"] = True
-
-        stream = self.client.chat.completions.create(**kwargs)
+        stream = self._request_completion(stream=True)
 
         content_parts: list[str] = []
         tool_calls_acc: dict[int, dict[str, Any]] = {}

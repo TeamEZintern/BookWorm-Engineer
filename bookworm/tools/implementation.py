@@ -103,10 +103,35 @@ def create_implementations(
         print(f"  → search_sources: {query_preview}")
         result = retrieve_context(config, query)
         return result if result else "(no matching sources found in the RAG index)"
+
+    def paper_to_code(paper_path: str, output_dir: str = "") -> str:
+        from ..llm import create_client
+        from ..paper2code.pipeline import run_pipeline
+
+        try:
+            resolved_paper = _resolve_inside_working_dir(working_dir, paper_path)
+        except ValueError as exc:
+            return f"Error: {exc}"
+
+        if not resolved_paper.exists():
+            return f"Error: {paper_path} not found."
+
+        if output_dir:
+            try:
+                resolved_output = _resolve_inside_working_dir(working_dir, output_dir)
+            except ValueError as exc:
+                return f"Error: {exc}"
+        else:
+            resolved_output = working_dir / f"{resolved_paper.stem}_repo"
+
+        client = create_client(config)
+        return run_pipeline(client, config, resolved_paper, resolved_output)
+
     return {
         "read_file": read_file,
         "write_file": write_file,
         "bash": bash,
         "ask_user": ask_user,
         "search_sources": search_sources,
+        "paper_to_code": paper_to_code,
     }
