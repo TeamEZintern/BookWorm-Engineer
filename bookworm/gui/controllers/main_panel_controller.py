@@ -8,11 +8,11 @@ and the input area. Wires widget signals via ``findChild()``.
 
 from typing import List, Optional
 
-from PySide6.QtCore import QObject, Qt, QTimer, Signal, QEvent
-from PySide6.QtGui import QGuiApplication, QTextBlockFormat, QTextCursor
+from PySide6.QtCore import QObject, Qt, QTimer, Signal, QEvent, QPoint
+from PySide6.QtGui import QGuiApplication, QTextCursor
 from PySide6.QtWidgets import (
     QWidget, QLabel, QScrollArea, QFrame, QTextEdit,
-    QPushButton, QVBoxLayout, QHBoxLayout, QSizePolicy,
+    QPushButton, QVBoxLayout, QHBoxLayout, QSizePolicy, QMenu,
 )
 
 from ..markdown_renderer import create_markdown_view, update_markdown_widget
@@ -28,6 +28,8 @@ class MainPanelController(QObject):
     draft_changed = Signal()
     agent_turn_requested = Signal()
     agent_turn_stop_requested = Signal()
+    mode_change_requested = Signal(str)
+    special_command_submitted = Signal(str)
 
     INPUT_MAX_HEIGHT = 120
     INPUT_STYLE_PADDING = 8
@@ -65,6 +67,7 @@ class MainPanelController(QObject):
         self.message_layout = self.widget.findChild(QVBoxLayout, "messageLayout")
         self.input_frame = self.widget.findChild(QFrame, "inputFrame")
         self.message_input = self.widget.findChild(QTextEdit, "messageInput")
+        self.mode_button = self.widget.findChild(QPushButton, "modeButton")
         self.send_button = self.widget.findChild(QPushButton, "sendButton")
 
         self.ui.panelLayout.setStretch(0, 1)
@@ -76,11 +79,15 @@ class MainPanelController(QObject):
         self.ui.inputLayout.setAlignment(
             self.send_button, Qt.AlignmentFlag.AlignBottom
         )
+        self.ui.inputLayout.setAlignment(
+            self.mode_button, Qt.AlignmentFlag.AlignBottom
+        )
         self.message_layout.addStretch()
 
         self._apply_styles()
         self._resize_message_input()
         self.message_input.textChanged.connect(self._on_message_input_changed)
+        self.mode_button.clicked.connect(self._show_mode_menu)
         self.send_button.clicked.connect(self.on_send_clicked)
         self.scroll_area.installEventFilter(self)
         self.widget.installEventFilter(self)
@@ -151,7 +158,55 @@ class MainPanelController(QObject):
                 padding: 4px 8px;
             }}
         """)
+        self._style_mode_button()
         self._update_send_button()
+
+    def _style_mode_button(self) -> None:
+        c = self.colors
+        self.mode_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {c['bg_secondary']};
+                color: {c['text_primary']};
+                border: 1px solid {c['border']};
+                border-radius: 5px;
+                padding: 8px 12px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {c['bg_tertiary']};
+            }}
+            QPushButton:disabled {{
+                color: {c['text_secondary']};
+            }}
+        """)
+
+    def update_mode(self, mode: str) -> None:
+        self.mode_button.setText(f"Mode: {mode.capitalize()}")
+
+    def _show_mode_menu(self) -> None:
+        if self._agent_turn_in_progress:
+            return
+        menu = QMenu(self.mode_button)
+        for mode in ("plan", "build", "research"):
+            action = menu.addAction(mode.capitalize())
+            action.triggered.connect(
+                lambda checked=False, selected_mode=mode: self.mode_change_requested.emit(
+                    selected_mode
+                )
+            )
+        menu.adjustSize()
+        menu_size = menu.sizeHint()
+        button_top_left = self.mode_button.mapToGlobal(self.mode_button.rect().topLeft())
+        window = self.widget.window()
+        window_top_left = window.mapToGlobal(window.rect().topLeft())
+        window_bottom_right = window.mapToGlobal(window.rect().bottomRight())
+
+        x = min(
+            max(button_top_left.x(), window_top_left.x()),
+            window_bottom_right.x() - menu_size.width(),
+        )
+        y = max(window_top_left.y(), button_top_left.y() - menu_size.height())
+        menu.exec(QPoint(x, y))
 
     def _style_send_button(self, is_stop: bool) -> None:
         c = self.colors
@@ -290,6 +345,7 @@ class MainPanelController(QObject):
     def set_agent_turn_in_progress(self, in_progress: bool) -> None:
         """Toggle Stop/Send and redo availability while the agent runner is active."""
         self._agent_turn_in_progress = in_progress
+        self.mode_button.setEnabled(not in_progress)
         self._update_send_button()
         self._update_redo_buttons()
 
@@ -648,6 +704,12 @@ class MainPanelController(QObject):
 
         content = self.message_input.toPlainText().strip()
         if not content:
+            return
+
+        if content.startswith("/"):
+            self.message_input.clear()
+            self._resize_message_input()
+            self.special_command_submitted.emit(content)
             return
 
         user_message = Message(role="user", content=content)

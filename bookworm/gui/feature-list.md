@@ -2,12 +2,12 @@
 
 > In-depth design implementation log for the BookWorm GUI.
 
-## Mode Switching `DONE`
+## Interface Switching `DONE`
 
-GUI is default mode when running `bookworm`, terminal accessible with `bookworm terminal`
+GUI is default interface when running `bookworm`, terminal accessible with `bookworm cli`
 
 - [x] Command-line argument parsing
-- [x] GUI mode detection working
+- [x] GUI interface detection working
 - [x] GUI window launch wired into CLI
 - [x] PySide6 added to dependencies
 - [x] Choose at the start of a session
@@ -91,6 +91,15 @@ Agent responses rendered as formatted markdown
   - Copy means to copy the raw markdown of the agent output.
   - Redo means re-prompting the agent with the same user input to get a new response, often because the original output had a glitch or the user was not satisfied with it.
 
+### Modes
+- [ ] Between the multiline user input and send button, there is a button that says `Mode: <active_mode>`.
+  - [ ] Clicking the button will show an context menu to choose from the available modes: Plan, Build, and Research.
+
+### Special Commands
+- [ ] User can type these into the user prompt to activate special commands as seen from `bookworm/commands.py`
+- [ ] Need to start with a slash: `/init`
+- [ ] Special commands should not have anything after that, e.g. `/mode build   Please read my repo` is not valid. In the case that it does, simply remind the user not to type extra things after the special command.
+  - [ ] For the `/help` command, modify it so it also notes this.
 ---
 
 ## Data Management `DONE`

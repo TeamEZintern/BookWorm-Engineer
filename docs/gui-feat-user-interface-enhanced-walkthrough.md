@@ -11,7 +11,7 @@ Use this when debugging: start from the flow diagram, then open the file named i
 
 | Area        | On `main`                               | On `feat/user-interface-enhanced`                                                    |
 | ----------- | --------------------------------------- | ------------------------------------------------------------------------------------ |
-| Entry       | Terminal agent only (`bookworm` → REPL) | **GUI is default** (`bookworm` opens PySide6 window); `bookworm terminal` keeps CLI  |
+| Entry       | Terminal agent only (`bookworm` → REPL) | **GUI is default** (`bookworm` opens PySide6 window); `bookworm cli` keeps CLI  |
 | UI          | None                                    | Full PySide6 app: side panel (chats) + main panel (conversation)                     |
 | Persistence | None in GUI                             | Chats saved as JSON under `**<project>/.bookworm/chats/`**                           |
 | Agent       | Synchronous terminal loop               | Same `Agent` class, but GUI runs turns on a **background thread** with **streaming** |

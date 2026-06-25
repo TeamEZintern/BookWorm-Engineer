@@ -52,8 +52,8 @@ Three subsystems share that spine:
 - `Agent.run()` is the REPL; `Agent._run_turn()` is the tool-calling loop: call the LLM with
   `tools=registry.schema`, append the assistant message, dispatch every `tool_call` via `call_tool`,
   append `role:"tool"` results, repeat until the model returns no tool calls.
-- Bare-string inputs are first routed through `handle_command` (`commands.py`): `init`, `exit`/`quit`,
-  `help`, `mode switch <plan|build|research>`. Only non-commands reach the LLM.
+- Slash-prefixed inputs are first routed through `handle_command` (`commands.py`): `/init`, `/exit`/
+ `/quit`, `/help`, `/mode <plan|build|research>`. Only non-commands reach the LLM.
 - **Modes change the system prompt, not the toolset.** `_set_mode` rewrites `messages[0]` via
   `build_system_prompt(config, mode)`. The three modes are `plan` (default), `build`, `research`.
 - A context-pressure guard injects a "wrap up" system message once `prompt_tokens / context_window`
