@@ -17,6 +17,8 @@ dependencies = [
     "chromadb",
     "sentence-transformers",
     "pypdf",
+    "pytest",
+    "ruff",
     "pyside6",
     "markdown",
     "pygments",
