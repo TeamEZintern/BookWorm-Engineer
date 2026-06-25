@@ -4,6 +4,10 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 
+class TurnCancelledError(Exception):
+    """Raised when an in-flight turn is stopped by the user."""
+
+
 @dataclass
 class TurnEventHandler:
     """Optional callbacks emitted while an agent turn runs."""

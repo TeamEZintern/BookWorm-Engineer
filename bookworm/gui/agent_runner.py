@@ -10,11 +10,12 @@ from typing import Any
 from PySide6.QtCore import QObject, QThread, Signal
 
 from bookworm.agent import Agent
-from bookworm.agent_events import TurnEventHandler
+from bookworm.agent_events import TurnCancelledError, TurnEventHandler
 
 
 class _TurnWorker(QObject):
     turn_complete = Signal(str, list)
+    turn_cancelled = Signal()
     text_delta = Signal(str)
     tool_call_started = Signal(str, str, str)
     tool_result = Signal(str, str)
@@ -35,6 +36,8 @@ class _TurnWorker(QObject):
         )
         try:
             self._agent.run_turn_with_events(handler)
+        except TurnCancelledError:
+            self.turn_cancelled.emit()
         except Exception as exc:
             self.failed.emit(str(exc))
 
@@ -50,12 +53,14 @@ class AgentRunner(QObject):
     tool_result = Signal(str, str)
     reasoning_delta = Signal(str)
     turn_complete = Signal(str, list)
+    turn_cancelled = Signal()
     error = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._thread: QThread | None = None
         self._worker: _TurnWorker | None = None
+        self._agent: Agent | None = None
 
     def is_running(self) -> bool:
         return self._thread is not None and self._thread.isRunning()
@@ -74,18 +79,28 @@ class AgentRunner(QObject):
         worker.tool_result.connect(self.tool_result.emit)
         worker.reasoning_delta.connect(self.reasoning_delta.emit)
         worker.turn_complete.connect(self.turn_complete.emit)
+        worker.turn_cancelled.connect(self.turn_cancelled.emit)
         worker.failed.connect(self.error.emit)
         worker.turn_complete.connect(thread.quit)
+        worker.turn_cancelled.connect(thread.quit)
         worker.failed.connect(thread.quit)
         worker.turn_complete.connect(worker.deleteLater)
+        worker.turn_cancelled.connect(worker.deleteLater)
         worker.failed.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
         thread.finished.connect(self._clear_worker)
 
         self._thread = thread
         self._worker = worker
+        self._agent = agent
         thread.start()
+
+    def stop_turn(self) -> None:
+        """Request cooperative cancellation of the active turn."""
+        if self._agent is not None:
+            self._agent.request_cancel()
 
     def _clear_worker(self) -> None:
         self._thread = None
         self._worker = None
+        self._agent = None

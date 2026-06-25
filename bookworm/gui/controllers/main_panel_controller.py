@@ -27,6 +27,7 @@ class MainPanelController(QObject):
     messages_changed = Signal()
     draft_changed = Signal()
     agent_turn_requested = Signal()
+    agent_turn_stop_requested = Signal()
 
     INPUT_MAX_HEIGHT = 120
     INPUT_STYLE_PADDING = 8
@@ -41,6 +42,7 @@ class MainPanelController(QObject):
         self._agent_turn_in_progress = False
         self._streaming_message: Optional[Message] = None
         self._streaming_tool_calls: list = []
+        self._redo_buttons: List[QPushButton] = []
         self._suppress_layout_refresh = False
         self._active_markdown_views: set = set()
 
@@ -149,17 +151,29 @@ class MainPanelController(QObject):
                 padding: 4px 8px;
             }}
         """)
+        self._update_send_button()
+
+    def _style_send_button(self, is_stop: bool) -> None:
+        c = self.colors
+        if is_stop:
+            background = "#dc3545"
+            hover = "#c82333"
+            text = "#ffffff"
+        else:
+            background = c["accent"]
+            hover = c["accent_hover"]
+            text = c["accent_text"]
         self.send_button.setStyleSheet(f"""
             QPushButton {{
-                background-color: {c['accent']};
-                color: {c['accent_text']};
+                background-color: {background};
+                color: {text};
                 border: none;
                 border-radius: 5px;
                 padding: 8px 16px;
                 font-weight: bold;
             }}
             QPushButton:hover {{
-                background-color: {c['accent_hover']};
+                background-color: {hover};
             }}
             QPushButton:disabled {{
                 background-color: {c['bg_tertiary']};
@@ -227,6 +241,7 @@ class MainPanelController(QObject):
 
     def clear_messages(self):
         self._active_markdown_views.clear()
+        self._redo_buttons.clear()
         self.messages.clear()
         self._streaming_message = None
         self._streaming_tool_calls = []
@@ -273,13 +288,25 @@ class MainPanelController(QObject):
         ]
 
     def set_agent_turn_in_progress(self, in_progress: bool) -> None:
-        """Keep send disabled globally while the agent runner is active."""
+        """Toggle Stop/Send and redo availability while the agent runner is active."""
         self._agent_turn_in_progress = in_progress
         self._update_send_button()
+        self._update_redo_buttons()
 
     def _update_send_button(self) -> None:
-        busy = self._agent_turn_in_progress or self.is_processing
-        self.send_button.setEnabled(not busy)
+        if self._agent_turn_in_progress:
+            self.send_button.setText("Stop")
+            self._style_send_button(is_stop=True)
+            self.send_button.setEnabled(True)
+            return
+        self.send_button.setText("Send")
+        self._style_send_button(is_stop=False)
+        self.send_button.setEnabled(not self.is_processing)
+
+    def _update_redo_buttons(self) -> None:
+        enabled = not self._agent_turn_in_progress
+        for button in self._redo_buttons:
+            button.setEnabled(enabled)
 
     def cancel_inflight_agent_request(self) -> None:
         """Rollback panel streaming UI when a turn could not be started."""
@@ -397,6 +424,10 @@ class MainPanelController(QObject):
         redo_btn.clicked.connect(
             lambda: self._redo_assistant_message(message)
         )
+        if self._agent_turn_in_progress:
+            redo_btn.setEnabled(False)
+        message.redo_button = redo_btn
+        self._redo_buttons.append(redo_btn)
         actions.addWidget(copy_btn)
         actions.addWidget(redo_btn)
         actions.addStretch()
@@ -430,6 +461,9 @@ class MainPanelController(QObject):
 
     def _remove_message(self, message: Message):
         """Remove a message from the model and its widget from the layout."""
+        redo_btn = getattr(message, "redo_button", None)
+        if redo_btn in self._redo_buttons:
+            self._redo_buttons.remove(redo_btn)
         widget = getattr(message, "display_widget", None)
         if message in self.messages:
             self.messages.remove(message)
@@ -511,6 +545,20 @@ class MainPanelController(QObject):
         self._finish_agent_turn()
         self.messages_changed.emit()
 
+    def finalize_stopped_agent_turn(self) -> None:
+        """Keep partial streamed content when the user stops the agent."""
+        if self._streaming_message is not None:
+            content = (self._streaming_message.content or "").strip()
+            if not content:
+                self._remove_message(self._streaming_message)
+            else:
+                self._streaming_message.tool_calls = self._streaming_tool_calls
+                self._flush_streaming_markdown(force=True)
+        self._streaming_message = None
+        self._streaming_tool_calls = []
+        self._finish_agent_turn()
+        self.messages_changed.emit()
+
     def fail_agent_turn(self, error: str) -> None:
         """Show an agent failure in the conversation."""
         if not self.is_processing:
@@ -562,6 +610,7 @@ class MainPanelController(QObject):
 
         saved = self.messages[:]
         self.messages = []
+        self._redo_buttons.clear()
         self._streaming_message = None
         self._streaming_tool_calls = []
         self._active_markdown_views.clear()
@@ -590,8 +639,11 @@ class MainPanelController(QObject):
         scrollbar.setValue(scrollbar.maximum())
 
     def on_send_clicked(self):
-        """Handle send button click."""
-        if self.is_processing or self._agent_turn_in_progress:
+        """Handle send/stop button click."""
+        if self._agent_turn_in_progress:
+            self.agent_turn_stop_requested.emit()
+            return
+        if self.is_processing:
             return
 
         content = self.message_input.toPlainText().strip()

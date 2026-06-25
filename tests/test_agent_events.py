@@ -1,8 +1,10 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
 from bookworm.agent import Agent
-from bookworm.agent_events import TurnEventHandler
+from bookworm.agent_events import TurnCancelledError, TurnEventHandler
 from bookworm.tools import ToolRegistry
 
 
@@ -115,6 +117,34 @@ def test_run_turn_with_events_emits_tool_events(tmp_path, monkeypatch):
     assert len(agent.messages) == 5
     assert agent.messages[2]["tool_calls"][0]["function"]["name"] == "bash"
     assert agent.messages[3]["role"] == "tool"
+
+
+def test_run_turn_with_events_stops_when_cancelled(tmp_path):
+    config = _fake_config(tmp_path)
+    registry = ToolRegistry(schema=[], implementations={})
+    client = MagicMock()
+
+    def streaming_create(**kwargs):
+        chunks = [_stream_chunk("Hel"), _stream_chunk("lo"), _stream_chunk("!")]
+
+        def generate():
+            for index, chunk in enumerate(chunks):
+                yield chunk
+                if index == 1:
+                    agent.request_cancel()
+
+        return generate()
+
+    client.chat.completions.create.side_effect = streaming_create
+
+    agent = Agent(config, client, registry, "system prompt")
+    agent.messages.append({"role": "user", "content": "Hi"})
+
+    with pytest.raises(TurnCancelledError):
+        agent.run_turn_with_events(TurnEventHandler())
+
+    assert agent.messages[-1]["role"] == "assistant"
+    assert agent.messages[-1]["content"] == "Hello"
 
 
 def test_run_turn_without_handler_uses_non_streaming_api(tmp_path):

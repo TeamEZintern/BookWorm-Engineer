@@ -69,6 +69,9 @@ class AppController(QObject):
         self.main_panel_controller.messages_changed.connect(self._on_messages_changed)
         self.main_panel_controller.draft_changed.connect(self._on_draft_changed)
         self.main_panel_controller.agent_turn_requested.connect(self._on_agent_turn_requested)
+        self.main_panel_controller.agent_turn_stop_requested.connect(
+            self._on_agent_turn_stop_requested
+        )
 
         self._ask_user_bridge = AskUserBridge(self.window)
         tool_registry = create_tool_registry(
@@ -88,6 +91,7 @@ class AppController(QObject):
         )
         self._agent_runner.tool_result.connect(self._on_agent_tool_result)
         self._agent_runner.turn_complete.connect(self._on_agent_turn_complete)
+        self._agent_runner.turn_cancelled.connect(self._on_agent_turn_cancelled)
         self._agent_runner.error.connect(self._on_agent_error)
 
         self.splitter.addWidget(self.side_panel_controller.widget)
@@ -270,6 +274,34 @@ class AppController(QObject):
         self._sync_agent_from_panel()
         self.window.statusBar().showMessage("Thinking...")
         self._agent_runner.start_turn(self.agent)
+
+    def _on_agent_turn_stop_requested(self) -> None:
+        if not self._agent_runner.is_running():
+            return
+        self.window.statusBar().showMessage("Stopping...")
+        self._agent_runner.stop_turn()
+
+    def _on_agent_turn_cancelled(self) -> None:
+        turn_chat_id = self._turn_chat_id
+        merged_tool_calls = self._turn_tool_calls
+        if turn_chat_id == self.current_chat_id:
+            self.main_panel_controller.finalize_stopped_agent_turn()
+        elif turn_chat_id:
+            chat = self.store.get(turn_chat_id)
+            if chat is not None and chat.messages:
+                last_message = chat.messages[-1]
+                if last_message.get("role") == "assistant":
+                    content = (last_message.get("content") or "").strip()
+                    if not content:
+                        chat.messages.pop()
+                    elif merged_tool_calls:
+                        last_message["tool_calls"] = merged_tool_calls
+                chat.updated_at = datetime.now()
+                self.store.save(chat)
+            self.main_panel_controller.detach_inflight_agent_turn()
+        self._clear_turn_state()
+        self._sync_agent_from_panel()
+        self.window.statusBar().showMessage("Stopped")
 
     def _on_agent_text_delta(self, delta: str) -> None:
         if not self._turn_chat_id or not delta:

@@ -3,7 +3,7 @@ from typing import Any
 
 from openai import OpenAI
 
-from .agent_events import TurnEventHandler
+from .agent_events import TurnCancelledError, TurnEventHandler
 from .commands import VALID_MODES, CommandResult, handle_command
 from .config import Config
 from .prompts import build_system_prompt
@@ -57,6 +57,18 @@ class Agent:
             {"role": "system", "content": system_prompt}
         ]
         self.sources_dir = self.config.working_dir / ".bookworm" / "sources"
+        self._cancel_requested = False
+
+    def request_cancel(self) -> None:
+        """Ask the current turn to stop at the next safe checkpoint."""
+        self._cancel_requested = True
+
+    def clear_cancel(self) -> None:
+        self._cancel_requested = False
+
+    def _check_cancelled(self) -> None:
+        if self._cancel_requested:
+            raise TurnCancelledError()
 
     def _set_mode(self, mode: str) -> None:
         if mode not in VALID_MODES:
@@ -169,8 +181,11 @@ class Agent:
         event_handler: TurnEventHandler | None = None,
     ) -> str:
         """Run one agent turn, optionally emitting progress events."""
+        self.clear_cancel()
         try:
             return self._run_turn(event_handler)
+        except TurnCancelledError:
+            raise
         except Exception as exc:
             if event_handler and event_handler.on_error:
                 event_handler.on_error(str(exc))
@@ -210,6 +225,7 @@ class Agent:
         turn_tool_calls: list[dict[str, Any]] = []
 
         while True:
+            self._check_cancelled()
             if event_handler is None:
                 final_content = self._run_non_streaming_leg(turn_tool_calls, event_handler)
             else:
@@ -277,45 +293,50 @@ class Agent:
         tool_calls_acc: dict[int, dict[str, Any]] = {}
         usage = None
 
-        for chunk in stream:
-            if not chunk.choices:
-                continue
+        try:
+            for chunk in stream:
+                self._check_cancelled()
+                if not chunk.choices:
+                    continue
 
-            delta = chunk.choices[0].delta
+                delta = chunk.choices[0].delta
 
-            reasoning_text = getattr(delta, "reasoning", None) or getattr(
-                delta, "reasoning_content", None
-            )
-            if reasoning_text and event_handler.on_reasoning_delta:
-                event_handler.on_reasoning_delta(reasoning_text)
+                reasoning_text = getattr(delta, "reasoning", None) or getattr(
+                    delta, "reasoning_content", None
+                )
+                if reasoning_text and event_handler.on_reasoning_delta:
+                    event_handler.on_reasoning_delta(reasoning_text)
 
-            if delta.content:
-                content_parts.append(delta.content)
-                if event_handler.on_text_delta:
-                    event_handler.on_text_delta(delta.content)
+                if delta.content:
+                    content_parts.append(delta.content)
+                    if event_handler.on_text_delta:
+                        event_handler.on_text_delta(delta.content)
 
-            if delta.tool_calls:
-                for tool_call_delta in delta.tool_calls:
-                    index = tool_call_delta.index
-                    if index not in tool_calls_acc:
-                        tool_calls_acc[index] = {
-                            "id": "",
-                            "type": "function",
-                            "function": {"name": "", "arguments": ""},
-                        }
-                    accumulated = tool_calls_acc[index]
-                    if tool_call_delta.id:
-                        accumulated["id"] = tool_call_delta.id
-                    if tool_call_delta.function:
-                        if tool_call_delta.function.name:
-                            accumulated["function"]["name"] += tool_call_delta.function.name
-                        if tool_call_delta.function.arguments:
-                            accumulated["function"]["arguments"] += (
-                                tool_call_delta.function.arguments
-                            )
+                if delta.tool_calls:
+                    for tool_call_delta in delta.tool_calls:
+                        index = tool_call_delta.index
+                        if index not in tool_calls_acc:
+                            tool_calls_acc[index] = {
+                                "id": "",
+                                "type": "function",
+                                "function": {"name": "", "arguments": ""},
+                            }
+                        accumulated = tool_calls_acc[index]
+                        if tool_call_delta.id:
+                            accumulated["id"] = tool_call_delta.id
+                        if tool_call_delta.function:
+                            if tool_call_delta.function.name:
+                                accumulated["function"]["name"] += tool_call_delta.function.name
+                            if tool_call_delta.function.arguments:
+                                accumulated["function"]["arguments"] += (
+                                    tool_call_delta.function.arguments
+                                )
 
-            if getattr(chunk, "usage", None) is not None:
-                usage = chunk.usage
+                if getattr(chunk, "usage", None) is not None:
+                    usage = chunk.usage
+        except TurnCancelledError:
+            self._append_partial_streaming_assistant(content_parts, tool_calls_acc)
+            raise
 
         final_content = "".join(content_parts)
         tool_calls_list = [tool_calls_acc[index] for index in sorted(tool_calls_acc)]
@@ -344,6 +365,21 @@ class Agent:
 
         return None
 
+    def _append_partial_streaming_assistant(
+        self,
+        content_parts: list[str],
+        tool_calls_acc: dict[int, dict[str, Any]],
+    ) -> None:
+        """Persist streamed assistant text when a turn is stopped mid-stream."""
+        final_content = "".join(content_parts)
+        if not final_content:
+            return
+        assistant_message: dict[str, Any] = {
+            "role": "assistant",
+            "content": final_content,
+        }
+        self.messages.append(assistant_message)
+
     def _execute_tool_call(
         self,
         call_id: str,
@@ -352,6 +388,7 @@ class Agent:
         turn_tool_calls: list[dict[str, Any]],
         event_handler: TurnEventHandler | None,
     ) -> None:
+        self._check_cancelled()
         if event_handler and event_handler.on_tool_call_started:
             event_handler.on_tool_call_started(tool_name, tool_arguments, call_id)
 

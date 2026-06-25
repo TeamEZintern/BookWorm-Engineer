@@ -65,8 +65,11 @@ Sort chats by Date created, Date modified, or Name
 Main panel displaying active conversation with message history
 
 - [x] Chat that is awaiting agent response will show a spin wheel in the chat item on the side panel.
-- [x] If user has prompted the agent in a chat, the "send" button will be temporarily disabled even if they switch chats until the agent is finished responding.
+- [x] If user has prompted the agent in a chat, the "redo" button at the bottom of all agent messages in any opened chat will be temporarily disabled until the agent is finished responding.
 - [x] Prompting the agent in one chat will always result in a response in the same chat even if user switches to another chat while the agent is still processing.
+- [x] Send button temporarily turns into a "Stop" button until agent is finished.
+  - [x] User can click the Stop button to stop the agent response.
+  - [x] Response that has already been generated will remain, even if it is cut off.
 
 ### User Messages `DONE`
 
