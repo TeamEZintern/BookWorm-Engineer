@@ -64,6 +64,10 @@ Sort chats by Date created, Date modified, or Name
 
 Main panel displaying active conversation with message history
 
+- [x] Chat that is awaiting agent response will show a spin wheel in the chat item on the side panel.
+- [x] If user has prompted the agent in a chat, the "send" button will be temporarily disabled even if they switch chats until the agent is finished responding.
+- [x] Prompting the agent in one chat will always result in a response in the same chat even if user switches to another chat while the agent is still processing.
+
 ### User Messages `DONE`
 
 Chat messages given by user

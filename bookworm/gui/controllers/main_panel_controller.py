@@ -38,6 +38,7 @@ class MainPanelController(QObject):
         self.colors = get_colors(config.theme)
         self.messages: List[Message] = []
         self.is_processing = False
+        self._agent_turn_in_progress = False
         self._streaming_message: Optional[Message] = None
         self._streaming_tool_calls: list = []
         self._suppress_layout_refresh = False
@@ -263,13 +264,54 @@ class MainPanelController(QObject):
         self.scroll_to_bottom()
         self.messages_changed.emit()
 
-    def get_message_dicts(self):
+    def get_message_dicts(self, include_streaming: bool = False):
         """Return the current conversation for persistence."""
         return [
             message.to_dict()
             for message in self.messages
-            if message is not self._streaming_message
+            if include_streaming or message is not self._streaming_message
         ]
+
+    def set_agent_turn_in_progress(self, in_progress: bool) -> None:
+        """Keep send disabled globally while the agent runner is active."""
+        self._agent_turn_in_progress = in_progress
+        self._update_send_button()
+
+    def _update_send_button(self) -> None:
+        busy = self._agent_turn_in_progress or self.is_processing
+        self.send_button.setEnabled(not busy)
+
+    def cancel_inflight_agent_request(self) -> None:
+        """Rollback panel streaming UI when a turn could not be started."""
+        if not self.is_processing:
+            return
+        if self._streaming_message is not None:
+            self._remove_message(self._streaming_message)
+            self._streaming_message = None
+        self._streaming_tool_calls = []
+        self._markdown_update_timer.stop()
+        self.is_processing = False
+        self._update_send_button()
+
+    def detach_inflight_agent_turn(self) -> None:
+        """Drop streaming UI state when switching chats during a background turn."""
+        self._markdown_update_timer.stop()
+        self._streaming_message = None
+        self._streaming_tool_calls = []
+        self.is_processing = False
+        self._update_send_button()
+
+    def reattach_streaming_turn(self) -> None:
+        """Resume panel streaming when returning to the chat that owns the active turn."""
+        for message in reversed(self.messages):
+            if message.role != "assistant":
+                continue
+            self._streaming_message = message
+            self._streaming_tool_calls = list(message.tool_calls or [])
+            self.is_processing = True
+            self._update_send_button()
+            self._flush_streaming_markdown(force=True)
+            return
 
     def display_message(self, message: Message, render_markdown: bool = True):
         """Display a single message in the chat."""
@@ -400,7 +442,11 @@ class MainPanelController(QObject):
 
     def _redo_assistant_message(self, message: Message):
         """Remove the agent response and request a new one from the agent."""
-        if self.is_processing or message.role != "assistant":
+        if (
+            self.is_processing
+            or self._agent_turn_in_progress
+            or message.role != "assistant"
+        ):
             return
         if message not in self.messages:
             return
@@ -411,7 +457,7 @@ class MainPanelController(QObject):
     def _request_agent_response(self):
         """Ask AppController to run the real agent for a response."""
         self.is_processing = True
-        self.send_button.setEnabled(False)
+        self._update_send_button()
         self.begin_streaming_agent_turn()
         self.agent_turn_requested.emit()
 
@@ -490,7 +536,7 @@ class MainPanelController(QObject):
 
     def _finish_agent_turn(self) -> None:
         self.is_processing = False
-        self.send_button.setEnabled(True)
+        self._update_send_button()
 
     def _schedule_streaming_markdown_update(self) -> None:
         self._markdown_update_timer.start(self.MARKDOWN_DEBOUNCE_MS)
@@ -545,7 +591,7 @@ class MainPanelController(QObject):
 
     def on_send_clicked(self):
         """Handle send button click."""
-        if self.is_processing:
+        if self.is_processing or self._agent_turn_in_progress:
             return
 
         content = self.message_input.toPlainText().strip()

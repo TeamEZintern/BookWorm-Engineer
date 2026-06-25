@@ -22,6 +22,7 @@ from ..models import Chat, default_chat_name
 from ..themes import get_colors
 from ..views.panel.ui_side_panel import Ui_SidePanel
 from ..views.widget.ui_chat_item import Ui_ChatItem
+from ..widgets import BusyIndicator
 
 
 class _ChatItemClickFilter(QObject):
@@ -125,6 +126,7 @@ class SidePanelController(QObject):
         self.current_sort = "date_modified"
         self.search_filter = ""
         self.active_chat_id: Optional[str] = None
+        self._loading_chat_id: Optional[str] = None
         self._editing_chat: Optional[Chat] = None
         self._editing_frame: Optional[QFrame] = None
         self._editing_original_name = ""
@@ -240,6 +242,13 @@ class SidePanelController(QObject):
         self.active_chat_id = chat_id
         self._update_active_chat_highlight()
 
+    def set_chat_loading(self, chat_id: Optional[str]) -> None:
+        """Show a spinner on the chat row that owns an in-flight agent turn."""
+        if chat_id == self._loading_chat_id:
+            return
+        self._loading_chat_id = chat_id
+        self._update_chat_loading_indicators()
+
     def _chat_item_stylesheet(self, is_active: bool) -> str:
         c = self.colors
         border = c["accent"] if is_active else c["border"]
@@ -349,8 +358,28 @@ class SidePanelController(QObject):
                 self.chat_list.addItem(item)
                 self.chat_list.setItemWidget(item, item_widget)
 
-                if chat.id == self.active_chat_id:
-                    self.chat_list.setCurrentItem(item)
+            if chat.id == self.active_chat_id:
+                self.chat_list.setCurrentItem(item)
+
+    def _update_chat_loading_indicators(self) -> None:
+        for index in range(self.chat_list.count()):
+            item = self.chat_list.item(index)
+            if item is None or not (item.flags() & Qt.ItemFlag.ItemIsEnabled):
+                continue
+            chat = item.data(Qt.ItemDataRole.UserRole)
+            if not chat:
+                continue
+            widget = self.chat_list.itemWidget(item)
+            if not isinstance(widget, QFrame):
+                continue
+            indicator = widget.findChild(BusyIndicator, "loadingIndicator")
+            if indicator is None:
+                continue
+            if chat.id == self._loading_chat_id:
+                indicator.set_color(self.colors["accent"])
+                indicator.start()
+            else:
+                indicator.stop()
 
     def _create_chat_item_widget(self, chat: Chat) -> QFrame:
         """Build a chat item widget from ui_chat_item for the list row."""
@@ -368,6 +397,21 @@ class SidePanelController(QObject):
         name_edit.editingFinished.connect(
             lambda _chat=chat: self._on_inline_rename_editing_finished(_chat)
         )
+
+        loading_indicator = BusyIndicator(self.colors["accent"], frame)
+        loading_indicator.setObjectName("loadingIndicator")
+        loading_indicator.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents,
+            True,
+        )
+        frame.layout().insertWidget(
+            frame.layout().count() - 1,
+            loading_indicator,
+            0,
+            Qt.AlignmentFlag.AlignVCenter,
+        )
+        if chat.id == self._loading_chat_id:
+            loading_indicator.start()
 
         overflow_button = frame.findChild(QPushButton, "overflowMenuButton")
         overflow_button.setCursor(Qt.CursorShape.PointingHandCursor)
