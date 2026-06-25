@@ -2,8 +2,8 @@
 
 Continuity notes for the paper2code / agent-loop hardening work on branch `feat/paper2code`.
 
-_Last updated: 2026-06-24 (end of day) — items 4 & 5 applied (uncommitted); only the logic_design
-cached-path fix remains before items 4/5 are fully closed._
+_Last updated: 2026-06-24 (end of day) — items 4 & 5 committed in `76a65f6`; logic_design cached-path
+NameError fixed too. Main remaining work is repair non-convergence (WIP item B)._
 
 ## Done (committed in `9e6024c`)
 
@@ -28,7 +28,7 @@ Verified present in the working tree (clean except README.md + this file):
 - **Item 3 — pipeline `_llm` uses `complete_with_retry`** (`pipeline.py:11,16`).
 - Created repo `CLAUDE.md` (architecture doc + "teach, don't just apply" working-style rule).
 
-## Done today (2026-06-24, applied — UNCOMMITTED in working tree: `pipeline.py`, `prompts.py`)
+## Done today (2026-06-24, committed in `76a65f6` — "pipeline is now robust but validation still has work")
 
 - **Item 4 — content-level JSON self-correction (applied):** added `_llm_json` helper (`pipeline.py:27`)
   that re-rolls on parse failure, feeding the bad output back with a corrective "reply with ONLY valid
@@ -45,8 +45,11 @@ Verified present in the working tree (clean except README.md + this file):
 - **Verified:** `ruff check bookworm/` clean; `pytest` 15/15 pass; `_llm_json` re-roll proven with a
   fake-client smoke; the earlier `complete_with_retry() takes 1 positional argument but 3 were given`
   TypeError confirmed to be a ghost from an old positional call, now fixed (all call sites use kwargs).
-- **NOT done (carried to WIP item A):** the `logic_design` stage still has the cached-path
-  `NameError` — items 4/5 are not fully closed until that lands. Next step: commit once A is in.
+- **logic_design cached-path NameError — FIXED & committed:** stage now uses the same `if/else` shape
+  as architecture (`pipeline.py:369-387`); the `else:` branch binds `logic` from the cached raw, so a
+  resumed run no longer crashes. Items 4 & 5 are now functionally complete.
+- **Tiny leftover (see WIP item A):** the logic_design cached-path error string (`:387`) still dumps
+  raw and lacks the `PIPELINE FAILED:` prefix, unlike architecture (`:367`). Cosmetic/consistency only.
 
 ## Fix queue (remaining — priority order)
 
@@ -70,13 +73,13 @@ tracked as WIP item A below. New design work is WIP item B.)
 
 ## WIP — resume here tomorrow (2026-06-25)
 
-### A. Finish the item-4 logic_design fix (small, do first)
-The cached `logic_design` path still raises `NameError: cannot access local variable 'logic'` — reproduced
-2026-06-24. Lines 384–387 (`try: logic = _extract_json(logic_raw)`) are still nested *inside* the
-`if logic_raw is None:` block, so a resumed run skips assigning `logic`. Fix = convert to the same `if/else`
-shape `architecture` uses (drop the dead re-parse, add an `else:` that parses the cached raw and returns
-`PIPELINE FAILED: cached logic_design.txt is not valid JSON: ...`). Snippet was already drafted in chat.
-Then re-run: `ruff check bookworm/`, `pytest`, and the cached-path smoke.
+### A. logic_design error-string consistency (tiny cleanup, optional)
+The cached-path `NameError` is FIXED & committed (`pipeline.py:369-387` now uses architecture's `if/else`
+shape). Only leftover: the cached-path failure at `:387` still returns
+`f"Failed to parse logic design JSON: {exc}\n\nRaw response:\n{logic_raw}"` — it dumps raw and lacks the
+`PIPELINE FAILED:` prefix. Change it to `return f"PIPELINE FAILED: cached logic_design.txt is not valid
+JSON: {exc}"` to match architecture (`:367`) and avoid handing raw back to the agent. Cosmetic; do it
+opportunistically, not blocking.
 
 ### B. Repair-loop non-convergence (the real work — see memory `paper2code-repair-nonconvergence.md`)
 Evidence run: `User-Facing/.bookworm/paper2code/Euclidean_Distance_Geometry_and_Applications/`
