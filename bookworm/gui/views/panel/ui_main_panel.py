@@ -1,0 +1,94 @@
+# -*- coding: utf-8 -*-
+
+################################################################################
+## Form generated from reading UI file 'main_panel.ui'
+##
+## Created by: Qt User Interface Compiler version 6.11.1
+##
+## WARNING! All changes made in this file will be lost when recompiling UI file!
+################################################################################
+
+from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
+    QMetaObject, QObject, QPoint, QRect,
+    QSize, QTime, QUrl, Qt)
+from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
+    QFont, QFontDatabase, QGradient, QIcon,
+    QImage, QKeySequence, QLinearGradient, QPainter,
+    QPalette, QPixmap, QRadialGradient, QTransform)
+from PySide6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QPushButton,
+    QScrollArea, QSizePolicy, QTextEdit, QVBoxLayout,
+    QWidget)
+
+class Ui_MainPanel(object):
+    def setupUi(self, MainPanel):
+        if not MainPanel.objectName():
+            MainPanel.setObjectName(u"MainPanel")
+        MainPanel.resize(800, 600)
+        self.panelLayout = QVBoxLayout(MainPanel)
+        self.panelLayout.setSpacing(0)
+        self.panelLayout.setObjectName(u"panelLayout")
+        self.panelLayout.setContentsMargins(0, 0, 0, 0)
+        self.scrollArea = QScrollArea(MainPanel)
+        self.scrollArea.setObjectName(u"scrollArea")
+        self.scrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.scrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scrollArea.setWidgetResizable(True)
+        self.messageContainer = QWidget()
+        self.messageContainer.setObjectName(u"messageContainer")
+        self.messageContainer.setGeometry(QRect(0, 0, 798, 550))
+        self.messageLayout = QVBoxLayout(self.messageContainer)
+        self.messageLayout.setSpacing(10)
+        self.messageLayout.setObjectName(u"messageLayout")
+        self.messageLayout.setContentsMargins(16, 16, 16, 16)
+        self.scrollArea.setWidget(self.messageContainer)
+
+        self.panelLayout.addWidget(self.scrollArea)
+
+        self.inputFrame = QFrame(MainPanel)
+        self.inputFrame.setObjectName(u"inputFrame")
+        sizePolicy = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.inputFrame.sizePolicy().hasHeightForWidth())
+        self.inputFrame.setSizePolicy(sizePolicy)
+        self.inputFrame.setFrameShape(QFrame.NoFrame)
+        self.inputLayout = QHBoxLayout(self.inputFrame)
+        self.inputLayout.setObjectName(u"inputLayout")
+        self.inputLayout.setContentsMargins(16, 10, 16, 10)
+        self.messageInput = QTextEdit(self.inputFrame)
+        self.messageInput.setObjectName(u"messageInput")
+        sizePolicy1 = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored)
+        sizePolicy1.setHorizontalStretch(0)
+        sizePolicy1.setVerticalStretch(0)
+        sizePolicy1.setHeightForWidth(self.messageInput.sizePolicy().hasHeightForWidth())
+        self.messageInput.setSizePolicy(sizePolicy1)
+        self.messageInput.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        self.inputLayout.addWidget(self.messageInput)
+
+        self.sendButton = QPushButton(self.inputFrame)
+        self.sendButton.setObjectName(u"sendButton")
+        sizePolicy2 = QSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Ignored)
+        sizePolicy2.setHorizontalStretch(0)
+        sizePolicy2.setVerticalStretch(0)
+        sizePolicy2.setHeightForWidth(self.sendButton.sizePolicy().hasHeightForWidth())
+        self.sendButton.setSizePolicy(sizePolicy2)
+        self.sendButton.setMinimumSize(QSize(80, 28))
+
+        self.inputLayout.addWidget(self.sendButton)
+
+
+        self.panelLayout.addWidget(self.inputFrame)
+
+
+        self.retranslateUi(MainPanel)
+
+        QMetaObject.connectSlotsByName(MainPanel)
+    # setupUi
+
+    def retranslateUi(self, MainPanel):
+        self.messageInput.setPlaceholderText(QCoreApplication.translate("MainPanel", u"Type a message...", None))
+        self.sendButton.setText(QCoreApplication.translate("MainPanel", u"Send", None))
+        pass
+    # retranslateUi
+

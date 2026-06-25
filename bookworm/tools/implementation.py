@@ -4,6 +4,8 @@ import subprocess
 from pathlib import Path
 from typing import Callable
 
+from typing import Callable
+
 from ..config import Config
 from ..rag.retriever import retrieve_context
 from .schema import ALLOWED_COMMAND_PREFIXES, SHELL_TIMEOUT
@@ -18,7 +20,10 @@ def _resolve_inside_working_dir(working_dir: Path, file_path: str) -> Path:
     return path
 
 
-def create_implementations(config: Config) -> dict[str, Callable[..., str]]:
+def create_implementations(
+    config: Config,
+    ask_user_fn: Callable[[str], str] | None = None,
+) -> dict[str, Callable[..., str]]:
     working_dir = config.working_dir
 
     def read_file(file_path: str) -> str:
@@ -87,6 +92,8 @@ def create_implementations(config: Config) -> dict[str, Callable[..., str]]:
         
     def ask_user(question: str) -> str:
         print(f"  → ask_user: {question}")
+        if ask_user_fn is not None:
+            return ask_user_fn(question)
         user_response = input("  > ").strip()
         print()
         return user_response

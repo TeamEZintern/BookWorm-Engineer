@@ -14,13 +14,13 @@ MAX_API_RETRIES = 4
 RETRY_BASE_DELAY = 2.0
 
 def create_client(config: Config) -> OpenAI:
-    return OpenAI(
-        api_key=config.llm_api_key,
-        base_url=config.llm_base_url,
-        default_headers={
-            "X-OpenRouter-Title": "BookWorm Engineer"
-        },
-    )
+    kwargs: dict = {
+        "api_key": config.llm_api_key,
+        "base_url": config.llm_base_url,
+    }
+    if "openrouter.ai" in config.llm_base_url:
+        kwargs["default_headers"] = {"X-OpenRouter-Title": "BookWorm Engineer"}
+    return OpenAI(**kwargs)
 
 def complete_with_retry(client: OpenAI, *, on_retry=None, **kwargs):
     """

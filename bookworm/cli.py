@@ -14,7 +14,7 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parent.parent
     load_dotenv(repo_root / ".env")
 
-    subcommand = sys.argv[1] if len(sys.argv) > 1 else "chat"
+    subcommand = sys.argv[1] if len(sys.argv) > 1 else "gui" # Opens GUI by default
 
     try:
         config = load_config(working_dir=Path.cwd())
@@ -22,12 +22,21 @@ def main() -> int:
         print(f"Configuration error: {exc}", file=sys.stderr)
         return 1
 
-    if subcommand == "index":
-        from .rag.indexer import build_index
-        print(build_index(config))
-        return 0
+    if subcommand == "gui":
+        from PySide6.QtWidgets import QApplication
+        from PySide6.QtCore import QTimer
+        from .gui import AppController, GUIConfig
+        from .gui.qt_message_filter import install_gui_qt_message_filter
 
-    if subcommand == "chat":
+        install_gui_qt_message_filter()
+        app = QApplication(sys.argv)
+        gui_config = GUIConfig.from_config(config)
+        controller = AppController(config, gui_config)
+        controller.window.show()
+        QTimer.singleShot(0, controller.main_panel_controller.refresh_message_layouts)
+        return app.exec()
+    
+    if subcommand == "terminal":
         client = create_client(config)
         tool_registry = create_tool_registry(config)
         system_prompt = build_system_prompt(config)
@@ -40,8 +49,13 @@ def main() -> int:
         )
         agent.run()
         return 0
+        
+    if subcommand == "index":
+        from .rag.indexer import build_index
+        print(build_index(config))
+        return 0
 
-    print(f"Unknown command '{subcommand}'. Usage: bookworm [chat|index]", file=sys.stderr)
+    print(f"Unknown command '{subcommand}'. Usage: bookworm [gui|terminal|index]", file=sys.stderr)
     return 1
 
 
