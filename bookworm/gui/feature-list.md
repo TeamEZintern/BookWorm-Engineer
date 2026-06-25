@@ -92,14 +92,17 @@ Agent responses rendered as formatted markdown
   - Redo means re-prompting the agent with the same user input to get a new response, often because the original output had a glitch or the user was not satisfied with it.
 
 ### Modes
-- [ ] Between the multiline user input and send button, there is a button that says `Mode: <active_mode>`.
-  - [ ] Clicking the button will show an context menu to choose from the available modes: Plan, Build, and Research.
+
+- [x] Between the multiline user input and send button, there is a button that says `Mode: <active_mode>`.
+  - [x] Clicking the button will show an context menu to choose from the available modes: Plan, Build, and Research.
 
 ### Special Commands
-- [ ] User can type these into the user prompt to activate special commands as seen from `bookworm/commands.py`
-- [ ] Need to start with a slash: `/init`
-- [ ] Special commands should not have anything after that, e.g. `/mode build   Please read my repo` is not valid. In the case that it does, simply remind the user not to type extra things after the special command.
-  - [ ] For the `/help` command, modify it so it also notes this.
+
+- [x] User can type these into the user prompt to activate special commands as seen from `bookworm/commands.py`
+- [x] Need to start with a slash: `/init`
+- [x] Special commands should not have anything after that, e.g. `/mode build   Please read my repo` is not valid. In the case that it does, simply remind the user not to type extra things after the special command.
+  - [x] For the `/help` command, modify it so it also notes this.
+
 ---
 
 ## Data Management `DONE`
@@ -132,7 +135,6 @@ JSON files stored in `.bookworm/chats/` directory, which is initialized in user'
 - [x] Global QSS stylesheet cascades to all standard widgets
 - [x] Theme-aware inline styles for message bubbles, inputs, buttons
 - [x] Live theme switching without restart
-
 
 ### Visual Feedback `DONE`
 
@@ -221,3 +223,4 @@ Based on [PySide6 docs](https://doc.qt.io/qtforpython-6/tools/pyside-uic.html):
 - Do **not** hand-edit `ui_*.py` — changes are lost on re-generation; put layout changes in the `.ui` file instead
 - Prefer `pyside6-uic` over raw `uic -g python` to avoid version mismatches
 - For a full list of options: `pyside6-uic -h`
+
