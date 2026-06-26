@@ -11,6 +11,7 @@ DRAFT_KEY = "draft"
 REQUIRED_CHAT_KEYS = {"id", "name", "created_at", "updated_at", "messages"}
 REQUIRED_MESSAGE_KEYS = {"role", "content", "timestamp"}
 VALID_ROLES = {"user", "assistant", "system"}
+ASSISTANT_PART_TYPES = {"reasoning", "tool_call", "tool_result", "final_answer"}
 
 
 def default_chat_name(when: Optional[datetime] = None) -> str:
@@ -33,13 +34,37 @@ def validate_message_data(data: Any) -> None:
         raise ValueError(f"message missing required keys: {sorted(missing)}")
     if data["role"] not in VALID_ROLES:
         raise ValueError(f"invalid message role: {data['role']!r}")
-    if not isinstance(data["content"], str):
-        raise ValueError("message content must be a string")
     if not isinstance(data["timestamp"], str):
         raise ValueError("message timestamp must be a string")
-    tool_calls = data.get("tool_calls", [])
-    if tool_calls is not None and not isinstance(tool_calls, list):
-        raise ValueError("message tool_calls must be a list")
+    if data["role"] == "assistant":
+        if not isinstance(data["content"], list):
+            raise ValueError("assistant message content must be a list")
+        for part in data["content"]:
+            validate_assistant_part(part)
+    elif not isinstance(data["content"], str):
+        raise ValueError("message content must be a string")
+
+
+def validate_assistant_part(part: Any) -> None:
+    """Validate one ordered assistant response part."""
+    if not isinstance(part, dict):
+        raise ValueError("assistant content part must be an object")
+    part_type = part.get("type")
+    if part_type not in ASSISTANT_PART_TYPES:
+        raise ValueError(f"invalid assistant content part type: {part_type!r}")
+    if part_type in {"reasoning", "final_answer"}:
+        if not isinstance(part.get("text"), str):
+            raise ValueError(f"{part_type} part text must be a string")
+        return
+    if part_type == "tool_call":
+        for key in ("id", "name", "arguments"):
+            if not isinstance(part.get(key), str):
+                raise ValueError(f"tool_call part {key} must be a string")
+        return
+    if not isinstance(part.get("tool_call_id"), str):
+        raise ValueError("tool_result part tool_call_id must be a string")
+    if not isinstance(part.get("content"), str):
+        raise ValueError("tool_result part content must be a string")
 
 
 def validate_chat_data(data: Any) -> None:

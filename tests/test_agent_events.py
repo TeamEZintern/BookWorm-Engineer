@@ -45,7 +45,7 @@ def _stream_chunk(content=None, tool_calls=None, usage=None):
     )
 
 
-def test_run_turn_with_events_streams_final_text(tmp_path):
+def test_run_turn_with_handler_streams_final_text(tmp_path):
     config = _fake_config(tmp_path)
     registry = ToolRegistry(schema=[], implementations={})
     client = MagicMock()
@@ -64,7 +64,7 @@ def test_run_turn_with_events_streams_final_text(tmp_path):
         on_turn_complete=lambda content, tool_calls: completed.append((content, tool_calls)),
     )
 
-    result = agent.run_turn_with_events(handler)
+    result = agent.run_turn(handler)
 
     assert result == "Hello"
     assert deltas == ["Hel", "lo"]
@@ -72,7 +72,7 @@ def test_run_turn_with_events_streams_final_text(tmp_path):
     assert agent.messages[-1]["content"] == "Hello"
 
 
-def test_run_turn_with_events_emits_tool_events(tmp_path, monkeypatch):
+def test_run_turn_with_handler_emits_tool_events(tmp_path, monkeypatch):
     config = _fake_config(tmp_path)
     registry = ToolRegistry(
         schema=[{"type": "function", "function": {"name": "bash", "parameters": {}}}],
@@ -109,7 +109,7 @@ def test_run_turn_with_events_emits_tool_events(tmp_path, monkeypatch):
         on_turn_complete=lambda content, tool_calls: None,
     )
 
-    result = agent.run_turn_with_events(handler)
+    result = agent.run_turn(handler)
 
     assert result == "Done"
     assert tool_started == [("bash", '{"command": "echo hi"}', "call_1")]
@@ -119,7 +119,7 @@ def test_run_turn_with_events_emits_tool_events(tmp_path, monkeypatch):
     assert agent.messages[3]["role"] == "tool"
 
 
-def test_run_turn_with_events_stops_when_cancelled(tmp_path):
+def test_run_turn_with_handler_stops_when_cancelled(tmp_path):
     config = _fake_config(tmp_path)
     registry = ToolRegistry(schema=[], implementations={})
     client = MagicMock()
@@ -141,7 +141,7 @@ def test_run_turn_with_events_stops_when_cancelled(tmp_path):
     agent.messages.append({"role": "user", "content": "Hi"})
 
     with pytest.raises(TurnCancelledError):
-        agent.run_turn_with_events(TurnEventHandler())
+        agent.run_turn(TurnEventHandler())
 
     assert agent.messages[-1]["role"] == "assistant"
     assert agent.messages[-1]["content"] == "Hello"

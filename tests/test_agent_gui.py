@@ -34,13 +34,16 @@ def test_load_conversation_from_gui_messages(tmp_path):
             "role": "user",
             "content": "Hello",
             "timestamp": "2026-06-23T10:00:00",
-            "tool_calls": [],
         },
         {
             "role": "assistant",
-            "content": "Hi there",
+            "content": [
+                {
+                    "type": "final_answer",
+                    "text": "Hi there",
+                }
+            ],
             "timestamp": "2026-06-23T10:00:01",
-            "tool_calls": [],
         },
     ])
 
@@ -57,7 +60,7 @@ def test_load_conversation_skips_non_chat_roles(tmp_path):
 
     agent.load_conversation([
         {"role": "tool", "content": "ignored", "timestamp": "2026-06-23T10:00:00"},
-        {"role": "user", "content": "Keep me", "timestamp": "2026-06-23T10:00:01", "tool_calls": []},
+        {"role": "user", "content": "Keep me", "timestamp": "2026-06-23T10:00:01"},
     ])
 
     assert len(agent.messages) == 2
@@ -74,20 +77,31 @@ def test_load_conversation_converts_gui_tool_calls(tmp_path):
             "role": "user",
             "content": "Describe the project",
             "timestamp": "2026-06-24T10:00:00",
-            "tool_calls": [],
         },
         {
             "role": "assistant",
-            "content": "It is a Pong game.",
-            "timestamp": "2026-06-24T10:00:01",
-            "tool_calls": [
+            "content": [
                 {
+                    "type": "reasoning",
+                    "text": "I should inspect the project.",
+                },
+                {
+                    "type": "tool_call",
                     "id": "call_1",
                     "name": "read_file",
                     "arguments": '{"file_path": "AGENTS.md"}',
-                    "result": "# AGENTS.md\nProject overview",
-                }
+                },
+                {
+                    "type": "tool_result",
+                    "tool_call_id": "call_1",
+                    "content": "# AGENTS.md\nProject overview",
+                },
+                {
+                    "type": "final_answer",
+                    "text": "It is a Pong game.",
+                },
             ],
+            "timestamp": "2026-06-24T10:00:01",
         },
     ])
 
@@ -105,4 +119,8 @@ def test_load_conversation_converts_gui_tool_calls(tmp_path):
         "role": "tool",
         "tool_call_id": "call_1",
         "content": "# AGENTS.md\nProject overview",
+    }
+    assert agent.messages[4] == {
+        "role": "assistant",
+        "content": "It is a Pong game.",
     }
