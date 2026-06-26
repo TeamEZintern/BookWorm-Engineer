@@ -125,9 +125,28 @@ Each chat is stored as a JSON file on disk inside `.bookworm/chats/`:
     },
     {
       "role": "assistant",
-      "content": "Here is a proposal...",
-      "timestamp": "2026-06-17T10:30:05Z",
-      "tool_calls": [...]
+      "content": [
+        {
+          "type": "reasoning",
+          "text": "I should inspect the project structure first."
+        },
+        {
+          "type": "tool_call",
+          "id": "call_123",
+          "name": "read_file",
+          "arguments": "{\"file_path\":\"AGENTS.md\"}"
+        },
+        {
+          "type": "tool_result",
+          "tool_call_id": "call_123",
+          "content": "# AGENTS.md\n\nProject instructions..."
+        },
+        {
+          "type": "final_answer",
+          "text": "Here is a proposal..."
+        }
+      ],
+      "timestamp": "2026-06-17T10:30:05Z"
     }
   ]
 }
