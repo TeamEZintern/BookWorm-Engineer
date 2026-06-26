@@ -452,6 +452,7 @@ class MainPanelController(QObject):
         parts_layout.setSpacing(6)
         message.parts_layout = parts_layout
         message.markdown_views = []
+        message.part_widgets = []
         layout.addLayout(parts_layout)
         self._refresh_assistant_parts(message)
 
@@ -556,7 +557,26 @@ class MainPanelController(QObject):
 
         layout.addWidget(toggle)
         layout.addWidget(detail)
+        container.bw_toggle = toggle
+        container.bw_detail = detail
+        container.bw_title = title
+        container.bw_body = body
         return container
+
+    def _update_collapsible_detail(self, container: QWidget, title: str, body: str) -> None:
+        toggle = getattr(container, "bw_toggle", None)
+        detail = getattr(container, "bw_detail", None)
+        if toggle is None or detail is None:
+            return
+        if getattr(container, "bw_title", None) != title:
+            toggle.setText(title)
+            container.bw_title = title
+        if getattr(container, "bw_body", None) != body:
+            was_visible = detail.isVisible()
+            detail.setPlainText(body)
+            detail.setFixedHeight(self._detail_height(body))
+            detail.setVisible(was_visible)
+            container.bw_body = body
 
     def _format_jsonish_text(self, text: str) -> str:
         stripped = (text or "").strip()
@@ -592,34 +612,146 @@ class MainPanelController(QObject):
         )
         return browser
 
+    def _assistant_renderables(self, message: Message) -> list[dict]:
+        renderables: list[dict] = []
+        tool_index = 0
+        for part_index, part in enumerate(message.parts):
+            part_type = part.get("type")
+            if part_type == "reasoning" and part.get("text", "").strip():
+                renderables.append(
+                    {
+                        "type": "reasoning",
+                        "key": f"reasoning:{part_index}",
+                        "title": "Reasoning",
+                        "body": part["text"].strip(),
+                    }
+                )
+            elif part_type == "tool_call":
+                tool_index += 1
+                call_id = part.get("id", "")
+                result = self._tool_result_for(message, call_id)
+                status = "done" if result not in (None, "") else "running"
+                renderables.append(
+                    {
+                        "type": "tool_call",
+                        "key": f"tool_call:{call_id}",
+                        "title": f"Tool {tool_index}: {part.get('name', 'tool')} ({status})",
+                        "body": self._format_tool_call_detail(part, result),
+                    }
+                )
+            elif part_type == "final_answer" and part.get("text"):
+                renderables.append(
+                    {
+                        "type": "final_answer",
+                        "key": f"final_answer:{part_index}",
+                        "text": part["text"],
+                    }
+                )
+        return renderables
+
+    def _remove_rendered_part_widgets(
+        self,
+        parts_layout: QVBoxLayout,
+        widgets: list[dict],
+        start_index: int,
+    ) -> None:
+        for entry in widgets[start_index:]:
+            widget = entry.get("widget")
+            if widget is None:
+                continue
+            self._active_markdown_views.discard(widget)
+            parts_layout.removeWidget(widget)
+            widget.deleteLater()
+        del widgets[start_index:]
+
+    def _create_rendered_part_widget(self, renderable: dict) -> dict:
+        if renderable["type"] == "final_answer":
+            widget = self._create_final_answer_widget(renderable["text"])
+            return {
+                "type": renderable["type"],
+                "key": renderable["key"],
+                "widget": widget,
+                "text": renderable["text"],
+            }
+        widget = self._create_collapsible_detail(
+            renderable["title"],
+            renderable["body"],
+        )
+        return {
+            "type": renderable["type"],
+            "key": renderable["key"],
+            "widget": widget,
+            "title": renderable["title"],
+            "body": renderable["body"],
+        }
+
+    def _update_rendered_part_widget(self, entry: dict, renderable: dict) -> None:
+        if renderable["type"] == "final_answer":
+            if entry.get("text") == renderable["text"]:
+                return
+            browser = entry["widget"]
+            update_markdown_widget(
+                browser,
+                renderable["text"],
+                self.colors,
+                is_valid=lambda v=browser: v in self._active_markdown_views,
+            )
+            entry["text"] = renderable["text"]
+            return
+        self._update_collapsible_detail(
+            entry["widget"],
+            renderable["title"],
+            renderable["body"],
+        )
+        entry["title"] = renderable["title"]
+        entry["body"] = renderable["body"]
+
     def _refresh_assistant_parts(self, message: Message) -> None:
         parts_layout = getattr(message, "parts_layout", None)
         if parts_layout is None:
             return
-        self._clear_layout(parts_layout)
-        message.markdown_views = []
+        renderables = self._assistant_renderables(message)
+        rendered_widgets = getattr(message, "part_widgets", [])
+        mismatch_at = None
+        for index, renderable in enumerate(renderables):
+            if index >= len(rendered_widgets):
+                break
+            entry = rendered_widgets[index]
+            if (
+                entry.get("type") != renderable["type"]
+                or entry.get("key") != renderable["key"]
+            ):
+                mismatch_at = index
+                break
 
-        tool_index = 0
-        for part in message.parts:
-            part_type = part.get("type")
-            if part_type == "reasoning" and part.get("text", "").strip():
-                parts_layout.addWidget(
-                    self._create_collapsible_detail("Reasoning", part["text"].strip())
-                )
-            elif part_type == "tool_call":
-                tool_index += 1
-                result = self._tool_result_for(message, part.get("id", ""))
-                status = "done" if result not in (None, "") else "running"
-                parts_layout.addWidget(
-                    self._create_collapsible_detail(
-                        f"Tool {tool_index}: {part.get('name', 'tool')} ({status})",
-                        self._format_tool_call_detail(part, result),
-                    )
-                )
-            elif part_type == "final_answer" and part.get("text"):
-                browser = self._create_final_answer_widget(part["text"])
-                message.markdown_views.append((browser, part["text"]))
-                parts_layout.addWidget(browser)
+        if mismatch_at is not None:
+            self._remove_rendered_part_widgets(
+                parts_layout,
+                rendered_widgets,
+                mismatch_at,
+            )
+
+        while len(rendered_widgets) > len(renderables):
+            self._remove_rendered_part_widgets(
+                parts_layout,
+                rendered_widgets,
+                len(renderables),
+            )
+
+        for index, renderable in enumerate(renderables):
+            if index < len(rendered_widgets):
+                self._update_rendered_part_widget(rendered_widgets[index], renderable)
+                continue
+            entry = self._create_rendered_part_widget(renderable)
+            rendered_widgets.append(entry)
+            parts_layout.addWidget(entry["widget"])
+
+        message.part_widgets = rendered_widgets
+        message.markdown_views = [
+            (entry["widget"], entry.get("text", ""))
+            for entry in rendered_widgets
+            if entry.get("type") == "final_answer"
+        ]
 
     def _style_action_button(self, button: QPushButton):
         c = self.colors
@@ -659,6 +791,7 @@ class MainPanelController(QObject):
             message.display_widget = None
             message.parts_layout = None
             message.markdown_views = []
+            message.part_widgets = []
         self.messages_changed.emit()
 
     def _redo_assistant_message(self, message: Message):
@@ -815,6 +948,7 @@ class MainPanelController(QObject):
                 msg.display_widget = None
                 msg.parts_layout = None
                 msg.markdown_views = []
+                msg.part_widgets = []
                 msg.user_bubble = None
                 self.messages.append(msg)
                 self.display_message(msg, render_markdown=False)
