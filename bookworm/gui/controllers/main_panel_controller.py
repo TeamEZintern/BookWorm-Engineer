@@ -34,7 +34,6 @@ class MainPanelController(QObject):
 
     INPUT_MAX_HEIGHT = 120
     INPUT_STYLE_PADDING = 8
-    MARKDOWN_DEBOUNCE_MS = 75
 
     def __init__(self, config, parent=None):
         super().__init__(parent)
@@ -49,11 +48,6 @@ class MainPanelController(QObject):
         self._redo_buttons: List[QPushButton] = []
         self._suppress_layout_refresh = False
         self._active_markdown_views: set = set()
-
-        self._markdown_update_timer = QTimer(self)
-        self._markdown_update_timer.setSingleShot(True)
-        self._markdown_update_timer.setInterval(self.MARKDOWN_DEBOUNCE_MS)
-        self._markdown_update_timer.timeout.connect(self._flush_streaming_markdown)
 
         self._layout_refresh_timer = QTimer(self)
         self._layout_refresh_timer.setSingleShot(True)
@@ -123,26 +117,17 @@ class MainPanelController(QObject):
                 if bubble is not None:
                     bubble.setMaximumWidth(max_width)
             elif message.role == "assistant":
-                browser = getattr(message, "markdown_browser", None)
-                if browser is not None:
+                for browser, content in getattr(message, "markdown_views", []):
                     update_markdown_widget(
                         browser,
-                        message.content,
+                        content,
                         self.colors,
                         is_valid=lambda v=browser: v in self._active_markdown_views,
                     )
         self.scroll_area.widget().updateGeometry()
 
     def _render_assistant_message(self, message: Message) -> None:
-        browser = getattr(message, "markdown_browser", None)
-        if browser is None:
-            return
-        update_markdown_widget(
-            browser,
-            message.content,
-            self.colors,
-            is_valid=lambda v=browser: v in self._active_markdown_views,
-        )
+        self._refresh_assistant_parts(message)
         self.scroll_to_bottom()
 
     def _apply_styles(self):
@@ -376,13 +361,11 @@ class MainPanelController(QObject):
             self._streaming_message = None
         self._streaming_tool_calls = []
         self._streaming_reasoning = ""
-        self._markdown_update_timer.stop()
         self.is_processing = False
         self._update_send_button()
 
     def detach_inflight_agent_turn(self) -> None:
         """Drop streaming UI state when switching chats during a background turn."""
-        self._markdown_update_timer.stop()
         self._streaming_message = None
         self._streaming_tool_calls = []
         self._streaming_reasoning = ""
@@ -395,11 +378,9 @@ class MainPanelController(QObject):
             if message.role != "assistant":
                 continue
             self._streaming_message = message
-            self._streaming_tool_calls = list(message.tool_calls or [])
-            self._streaming_reasoning = message.reasoning or ""
             self.is_processing = True
             self._update_send_button()
-            self._flush_streaming_markdown(force=True)
+            self._refresh_assistant_parts(message)
             return
 
     def display_message(self, message: Message, render_markdown: bool = True):
@@ -460,23 +441,19 @@ class MainPanelController(QObject):
         return container
 
     def _create_assistant_message_widget(self, message: Message) -> QWidget:
-        """Agent message: markdown with copy/redo buttons below."""
+        """Agent message: ordered reasoning/tool/final-answer parts with actions below."""
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 8, 0, 8)
         layout.setSpacing(8)
         layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
-        browser = create_markdown_view()
-        self._active_markdown_views.add(browser)
-        message.markdown_browser = browser
-        layout.addWidget(browser)
-
-        metadata_layout = QVBoxLayout()
-        metadata_layout.setSpacing(6)
-        message.metadata_layout = metadata_layout
-        layout.addLayout(metadata_layout)
-        self._refresh_assistant_metadata(message)
+        parts_layout = QVBoxLayout()
+        parts_layout.setSpacing(6)
+        message.parts_layout = parts_layout
+        message.markdown_views = []
+        layout.addLayout(parts_layout)
+        self._refresh_assistant_parts(message)
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
@@ -487,7 +464,7 @@ class MainPanelController(QObject):
         self._style_action_button(copy_btn)
         self._style_action_button(redo_btn)
         copy_btn.clicked.connect(
-            lambda: self._copy_to_clipboard(message.content)
+            lambda: self._copy_to_clipboard(message.text)
         )
         redo_btn.clicked.connect(
             lambda: self._redo_assistant_message(message)
@@ -499,6 +476,11 @@ class MainPanelController(QObject):
         actions.addWidget(copy_btn)
         actions.addWidget(redo_btn)
         actions.addStretch()
+        timestamp = QLabel(self._format_timestamp(message.timestamp))
+        timestamp.setStyleSheet(
+            f"color: {self.colors['text_secondary']}; font-size: 11px; background: transparent;"
+        )
+        actions.addWidget(timestamp)
         layout.addLayout(actions)
 
         return container
@@ -507,6 +489,7 @@ class MainPanelController(QObject):
         while layout.count() > 0:
             item = layout.takeAt(0)
             if item.widget():
+                self._active_markdown_views.discard(item.widget())
                 item.widget().deleteLater()
             elif item.layout():
                 self._clear_layout(item.layout())
@@ -584,32 +567,59 @@ class MainPanelController(QObject):
         except json.JSONDecodeError:
             return stripped
 
-    def _format_tool_call_detail(self, tool_call: dict) -> str:
+    def _format_tool_call_detail(self, tool_call: dict, result: str | None = None) -> str:
         arguments = self._format_jsonish_text(tool_call.get("arguments", ""))
-        result = tool_call.get("result")
         result_text = result if result not in (None, "") else "Running..."
         return f"Arguments:\n{arguments}\n\nResult:\n{result_text}"
 
-    def _refresh_assistant_metadata(self, message: Message) -> None:
-        metadata_layout = getattr(message, "metadata_layout", None)
-        if metadata_layout is None:
+    def _tool_result_for(self, message: Message, call_id: str) -> str | None:
+        for part in message.parts:
+            if (
+                part.get("type") == "tool_result"
+                and part.get("tool_call_id") == call_id
+            ):
+                return part.get("content", "")
+        return None
+
+    def _create_final_answer_widget(self, text: str) -> QWidget:
+        browser = create_markdown_view()
+        self._active_markdown_views.add(browser)
+        update_markdown_widget(
+            browser,
+            text,
+            self.colors,
+            is_valid=lambda v=browser: v in self._active_markdown_views,
+        )
+        return browser
+
+    def _refresh_assistant_parts(self, message: Message) -> None:
+        parts_layout = getattr(message, "parts_layout", None)
+        if parts_layout is None:
             return
-        self._clear_layout(metadata_layout)
+        self._clear_layout(parts_layout)
+        message.markdown_views = []
 
-        if message.reasoning.strip():
-            metadata_layout.addWidget(
-                self._create_collapsible_detail("Reasoning", message.reasoning.strip())
-            )
-
-        for index, tool_call in enumerate(message.tool_calls, start=1):
-            name = tool_call.get("name") or tool_call.get("function", {}).get("name", "tool")
-            status = "done" if tool_call.get("result") not in (None, "") else "running"
-            metadata_layout.addWidget(
-                self._create_collapsible_detail(
-                    f"Tool {index}: {name} ({status})",
-                    self._format_tool_call_detail(tool_call),
+        tool_index = 0
+        for part in message.parts:
+            part_type = part.get("type")
+            if part_type == "reasoning" and part.get("text", "").strip():
+                parts_layout.addWidget(
+                    self._create_collapsible_detail("Reasoning", part["text"].strip())
                 )
-            )
+            elif part_type == "tool_call":
+                tool_index += 1
+                result = self._tool_result_for(message, part.get("id", ""))
+                status = "done" if result not in (None, "") else "running"
+                parts_layout.addWidget(
+                    self._create_collapsible_detail(
+                        f"Tool {tool_index}: {part.get('name', 'tool')} ({status})",
+                        self._format_tool_call_detail(part, result),
+                    )
+                )
+            elif part_type == "final_answer" and part.get("text"):
+                browser = self._create_final_answer_widget(part["text"])
+                message.markdown_views.append((browser, part["text"]))
+                parts_layout.addWidget(browser)
 
     def _style_action_button(self, button: QPushButton):
         c = self.colors
@@ -647,8 +657,8 @@ class MainPanelController(QObject):
             self.message_layout.removeWidget(widget)
             widget.deleteLater()
             message.display_widget = None
-            message.markdown_browser = None
-            message.metadata_layout = None
+            message.parts_layout = None
+            message.markdown_views = []
         self.messages_changed.emit()
 
     def _redo_assistant_message(self, message: Message):
@@ -676,23 +686,24 @@ class MainPanelController(QObject):
         """Create a placeholder assistant message for streamed output."""
         self._streaming_tool_calls = []
         self._streaming_reasoning = ""
-        self._streaming_message = Message(role="assistant", content="")
+        self._streaming_message = Message.assistant()
         self.add_message(self._streaming_message)
 
     def append_agent_text_delta(self, delta: str) -> None:
         """Append streamed assistant text and schedule a markdown refresh."""
         if not self._streaming_message or not delta:
             return
-        self._streaming_message.content += delta
-        self._schedule_streaming_markdown_update()
+        self._streaming_message.append_final_answer_delta(delta)
+        self._refresh_assistant_parts(self._streaming_message)
+        self.scroll_to_bottom()
 
     def append_agent_reasoning_delta(self, delta: str) -> None:
         """Append streamed reasoning text into the assistant metadata section."""
         if not self._streaming_message or not delta:
             return
         self._streaming_reasoning += delta
-        self._streaming_message.reasoning = self._streaming_reasoning
-        self._refresh_assistant_metadata(self._streaming_message)
+        self._streaming_message.append_reasoning_delta(delta)
+        self._refresh_assistant_parts(self._streaming_message)
 
     def record_agent_tool_call_started(
         self,
@@ -709,8 +720,8 @@ class MainPanelController(QObject):
             }
         )
         if self._streaming_message is not None:
-            self._streaming_message.tool_calls = self._streaming_tool_calls
-            self._refresh_assistant_metadata(self._streaming_message)
+            self._streaming_message.append_tool_call(call_id, name, arguments)
+            self._refresh_assistant_parts(self._streaming_message)
 
     def record_agent_tool_result(self, call_id: str, output: str) -> None:
         """Attach tool output to the in-flight turn metadata."""
@@ -719,22 +730,17 @@ class MainPanelController(QObject):
                 tool_call["result"] = output
                 break
         if self._streaming_message is not None:
-            self._streaming_message.tool_calls = self._streaming_tool_calls
-            self._refresh_assistant_metadata(self._streaming_message)
+            self._streaming_message.append_tool_result(call_id, output)
+            self._refresh_assistant_parts(self._streaming_message)
 
     def complete_streaming_agent_turn(
         self,
         content: str,
-        tool_calls: list,
-        reasoning: str = "",
     ) -> None:
         """Finalize the streaming assistant message."""
         if self._streaming_message is not None:
-            self._streaming_message.content = content
-            self._streaming_message.tool_calls = tool_calls or self._streaming_tool_calls
-            self._streaming_message.reasoning = reasoning or self._streaming_reasoning
-            self._flush_streaming_markdown(force=True)
-            self._refresh_assistant_metadata(self._streaming_message)
+            self._streaming_message.set_final_answer(content)
+            self._refresh_assistant_parts(self._streaming_message)
         self._streaming_message = None
         self._streaming_tool_calls = []
         self._streaming_reasoning = ""
@@ -744,14 +750,10 @@ class MainPanelController(QObject):
     def finalize_stopped_agent_turn(self) -> None:
         """Keep partial streamed content when the user stops the agent."""
         if self._streaming_message is not None:
-            content = (self._streaming_message.content or "").strip()
-            if not content:
+            if not self._streaming_message.parts:
                 self._remove_message(self._streaming_message)
             else:
-                self._streaming_message.tool_calls = self._streaming_tool_calls
-                self._streaming_message.reasoning = self._streaming_reasoning
-                self._flush_streaming_markdown(force=True)
-                self._refresh_assistant_metadata(self._streaming_message)
+                self._refresh_assistant_parts(self._streaming_message)
         self._streaming_message = None
         self._streaming_tool_calls = []
         self._streaming_reasoning = ""
@@ -764,20 +766,23 @@ class MainPanelController(QObject):
             return
 
         if self._streaming_message is not None:
-            partial = (self._streaming_message.content or "").strip()
+            partial = self._streaming_message.text.strip()
             if partial:
-                self._streaming_message.content = (
+                self._streaming_message.set_final_answer(
                     f"{partial}\n\n---\n\n**Error:** {error}"
                 )
             else:
-                self._streaming_message.content = f"Error: {error}"
-            self._flush_streaming_markdown(force=True)
+                self._streaming_message.set_final_answer(f"Error: {error}")
+            self._refresh_assistant_parts(self._streaming_message)
             self._streaming_message = None
             self._streaming_tool_calls = []
             self._streaming_reasoning = ""
         else:
             self.add_message(
-                Message(role="assistant", content=f"Error: {error}")
+                Message(
+                    role="assistant",
+                    content=[{"type": "final_answer", "text": f"Error: {error}"}],
+                )
             )
         self._finish_agent_turn()
         self.messages_changed.emit()
@@ -785,24 +790,6 @@ class MainPanelController(QObject):
     def _finish_agent_turn(self) -> None:
         self.is_processing = False
         self._update_send_button()
-
-    def _schedule_streaming_markdown_update(self) -> None:
-        self._markdown_update_timer.start(self.MARKDOWN_DEBOUNCE_MS)
-
-    def _flush_streaming_markdown(self, force: bool = False) -> None:
-        if not force:
-            self._markdown_update_timer.stop()
-        message = self._streaming_message
-        browser = getattr(message, "markdown_browser", None) if message else None
-        if message is None or browser is None:
-            return
-        update_markdown_widget(
-            browser,
-            message.content,
-            self.colors,
-            is_valid=lambda v=browser: v in self._active_markdown_views,
-        )
-        self.scroll_to_bottom()
 
     def apply_theme(self, theme_name: str):
         self.colors = get_colors(theme_name)
@@ -826,7 +813,8 @@ class MainPanelController(QObject):
 
             for msg in saved:
                 msg.display_widget = None
-                msg.markdown_browser = None
+                msg.parts_layout = None
+                msg.markdown_views = []
                 msg.user_bubble = None
                 self.messages.append(msg)
                 self.display_message(msg, render_markdown=False)

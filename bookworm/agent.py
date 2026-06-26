@@ -13,33 +13,64 @@ from .tools import ToolRegistry, call_tool
 HALLUNCINATION_THRESHOLD = 0.75
 
 
-def _api_tool_calls_from_gui(tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Convert GUI-persisted tool metadata to OpenAI API tool_calls shape."""
-    api_calls: list[dict[str, Any]] = []
-    for tool_call in tool_calls:
-        if "function" in tool_call:
-            api_calls.append(
+def _api_tool_call_from_part(part: dict[str, Any]) -> dict[str, Any]:
+    """Convert a GUI tool_call content part to OpenAI API tool_calls shape."""
+    return {
+        "id": part["id"],
+        "type": "function",
+        "function": {
+            "name": part["name"],
+            "arguments": part.get("arguments", "{}"),
+        },
+    }
+
+
+def _api_messages_from_assistant_parts(parts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert ordered GUI assistant parts into OpenAI-compatible messages."""
+    messages: list[dict[str, Any]] = []
+    pending_tool_calls: list[dict[str, Any]] = []
+
+    def flush_tool_calls() -> None:
+        nonlocal pending_tool_calls
+        if not pending_tool_calls:
+            return
+        messages.append(
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": pending_tool_calls,
+            }
+        )
+        pending_tool_calls = []
+
+    for part in parts:
+        part_type = part.get("type")
+        if part_type == "reasoning":
+            continue
+        if part_type == "tool_call":
+            pending_tool_calls.append(_api_tool_call_from_part(part))
+            continue
+        if part_type == "tool_result":
+            flush_tool_calls()
+            messages.append(
                 {
-                    "id": tool_call["id"],
-                    "type": tool_call.get("type", "function"),
-                    "function": {
-                        "name": tool_call["function"]["name"],
-                        "arguments": tool_call["function"]["arguments"],
-                    },
+                    "role": "tool",
+                    "tool_call_id": part["tool_call_id"],
+                    "content": part.get("content", ""),
                 }
             )
             continue
-        api_calls.append(
-            {
-                "id": tool_call["id"],
-                "type": "function",
-                "function": {
-                    "name": tool_call["name"],
-                    "arguments": tool_call.get("arguments", "{}"),
-                },
-            }
-        )
-    return api_calls
+        if part_type == "final_answer":
+            flush_tool_calls()
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": part.get("text", ""),
+                }
+            )
+
+    flush_tool_calls()
+    return messages
 
 
 class Agent:
@@ -162,27 +193,12 @@ class Agent:
             role = message.get("role")
             if role not in {"user", "assistant"}:
                 continue
-            api_message: dict[str, Any] = {
-                "role": role,
-                "content": message.get("content", ""),
-            }
-            tool_calls = message.get("tool_calls") or []
-            if tool_calls:
-                api_message["tool_calls"] = _api_tool_calls_from_gui(tool_calls)
-            self.messages.append(api_message)
-            if role == "assistant":
-                for tool_call in tool_calls:
-                    result = tool_call.get("result")
-                    call_id = tool_call.get("id")
-                    if result is None or not call_id:
-                        continue
-                    self.messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": call_id,
-                            "content": result,
-                        }
-                    )
+            content = message.get("content", "")
+            if role == "user":
+                self.messages.append({"role": "user", "content": content})
+                continue
+            if isinstance(content, list):
+                self.messages.extend(_api_messages_from_assistant_parts(content))
 
     def run_turn(self, event_handler: TurnEventHandler | None = None) -> str:
         """Run one agent turn, optionally emitting progress events."""

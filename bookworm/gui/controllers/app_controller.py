@@ -122,11 +122,16 @@ class AppController(QObject):
     def _default_welcome_message(self) -> dict:
         return {
             "role": "assistant",
-            "content": (
-                "Welcome to Bookworm GUI! This is a graphical interface for the "
-                "Bookworm AI coding assistant. You can create, rename, and delete "
-                "chats, and chat with the agent."
-            ),
+            "content": [
+                {
+                    "type": "final_answer",
+                    "text": (
+                        "Welcome to Bookworm GUI! This is a graphical interface for the "
+                        "Bookworm AI coding assistant. You can create, rename, and delete "
+                        "chats, and chat with the agent."
+                    ),
+                }
+            ],
             "timestamp": datetime.now().isoformat(),
         }
 
@@ -191,65 +196,86 @@ class AppController(QObject):
 
     def _assistant_message_dict(
         self,
-        content: str,
-        tool_calls: list | None = None,
-        reasoning: str = "",
+        content: list | None = None,
     ) -> dict:
         return {
             "role": "assistant",
-            "content": content,
+            "content": content or [],
             "timestamp": datetime.now().isoformat(),
-            "tool_calls": tool_calls or [],
-            "reasoning": reasoning,
         }
 
-    def _update_turn_assistant_in_store(
-        self,
-        content: str,
-        tool_calls: list | None = None,
-        reasoning: str | None = None,
-    ) -> None:
+    def _ensure_turn_assistant_in_store(self) -> dict | None:
         if not self._turn_chat_id:
+            return None
+        chat = self.store.get(self._turn_chat_id)
+        if chat is None:
+            return None
+        if not chat.messages or chat.messages[-1].get("role") != "assistant":
+            chat.messages.append(self._assistant_message_dict())
+        assistant_message = chat.messages[-1]
+        if not isinstance(assistant_message.get("content"), list):
+            assistant_message["content"] = []
+        return assistant_message
+
+    def _append_turn_part_to_store(self, part: dict) -> None:
+        assistant_message = self._ensure_turn_assistant_in_store()
+        if assistant_message is None:
             return
+        assistant_message["content"].append(part)
         chat = self.store.get(self._turn_chat_id)
         if chat is None:
             return
-        if chat.messages and chat.messages[-1].get("role") == "assistant":
-            chat.messages[-1]["content"] = content
-            if tool_calls is not None:
-                chat.messages[-1]["tool_calls"] = tool_calls
-            if reasoning is not None:
-                chat.messages[-1]["reasoning"] = reasoning
-        else:
-            chat.messages.append(
-                self._assistant_message_dict(content, tool_calls, reasoning or "")
-            )
         chat.updated_at = datetime.now()
         self.store.save(chat)
 
     def _append_turn_reasoning_to_store(self, delta: str) -> None:
-        if not self._turn_chat_id or not delta:
+        if not delta:
             return
+        assistant_message = self._ensure_turn_assistant_in_store()
+        if assistant_message is None:
+            return
+        content = assistant_message["content"]
+        if content and content[-1].get("type") == "reasoning":
+            content[-1]["text"] = content[-1].get("text", "") + delta
+        else:
+            content.append({"type": "reasoning", "text": delta})
         chat = self.store.get(self._turn_chat_id)
         if chat is None:
             return
-        if chat.messages and chat.messages[-1].get("role") == "assistant":
-            chat.messages[-1]["reasoning"] = chat.messages[-1].get("reasoning", "") + delta
-        else:
-            chat.messages.append(self._assistant_message_dict("", reasoning=delta))
         chat.updated_at = datetime.now()
         self.store.save(chat)
 
     def _append_turn_delta_to_store(self, delta: str) -> None:
-        if not self._turn_chat_id or not delta:
+        if not delta:
             return
+        assistant_message = self._ensure_turn_assistant_in_store()
+        if assistant_message is None:
+            return
+        content = assistant_message["content"]
+        if content and content[-1].get("type") == "final_answer":
+            content[-1]["text"] = content[-1].get("text", "") + delta
+        else:
+            content.append({"type": "final_answer", "text": delta})
         chat = self.store.get(self._turn_chat_id)
         if chat is None:
             return
-        if chat.messages and chat.messages[-1].get("role") == "assistant":
-            chat.messages[-1]["content"] = chat.messages[-1].get("content", "") + delta
+        chat.updated_at = datetime.now()
+        self.store.save(chat)
+
+    def _set_turn_final_answer_in_store(self, content: str) -> None:
+        assistant_message = self._ensure_turn_assistant_in_store()
+        if assistant_message is None:
+            return
+        parts = assistant_message["content"]
+        for part in reversed(parts):
+            if part.get("type") == "final_answer":
+                part["text"] = content
+                break
         else:
-            chat.messages.append(self._assistant_message_dict(delta))
+            parts.append({"type": "final_answer", "text": content})
+        chat = self.store.get(self._turn_chat_id)
+        if chat is None:
+            return
         chat.updated_at = datetime.now()
         self.store.save(chat)
 
@@ -323,7 +349,15 @@ class AppController(QObject):
             return
         if output_messages:
             self.main_panel_controller.add_message(
-                Message(role="assistant", content="\n".join(output_messages))
+                Message(
+                    role="assistant",
+                    content=[
+                        {
+                            "type": "final_answer",
+                            "text": "\n".join(output_messages),
+                        }
+                    ],
+                )
             )
         if result == CommandResult.EXIT:
             self._save_current_chat()
@@ -352,7 +386,6 @@ class AppController(QObject):
 
     def _on_agent_turn_cancelled(self) -> None:
         turn_chat_id = self._turn_chat_id
-        merged_tool_calls = self._turn_tool_calls
         if turn_chat_id == self.current_chat_id:
             self.main_panel_controller.finalize_stopped_agent_turn()
         elif turn_chat_id:
@@ -360,12 +393,9 @@ class AppController(QObject):
             if chat is not None and chat.messages:
                 last_message = chat.messages[-1]
                 if last_message.get("role") == "assistant":
-                    content = (last_message.get("content") or "").strip()
+                    content = last_message.get("content")
                     if not content:
                         chat.messages.pop()
-                    elif merged_tool_calls:
-                        last_message["tool_calls"] = merged_tool_calls
-                        last_message["reasoning"] = self._turn_reasoning
                 chat.updated_at = datetime.now()
                 self.store.save(chat)
             self.main_panel_controller.detach_inflight_agent_turn()
@@ -403,6 +433,15 @@ class AppController(QObject):
                 "arguments": arguments,
             }
         )
+        if self._turn_chat_id != self.current_chat_id:
+            self._append_turn_part_to_store(
+                {
+                    "type": "tool_call",
+                    "id": call_id,
+                    "name": name,
+                    "arguments": arguments,
+                }
+            )
         if self._turn_chat_id == self.current_chat_id:
             self.main_panel_controller.record_agent_tool_call_started(
                 name,
@@ -416,24 +455,26 @@ class AppController(QObject):
             if tool_call.get("id") == call_id:
                 tool_call["result"] = output
                 break
+        if self._turn_chat_id != self.current_chat_id:
+            self._append_turn_part_to_store(
+                {
+                    "type": "tool_result",
+                    "tool_call_id": call_id,
+                    "content": output,
+                }
+            )
         if self._turn_chat_id == self.current_chat_id:
             self.main_panel_controller.record_agent_tool_result(call_id, output)
 
     def _on_agent_turn_complete(self, content: str, tool_calls: list) -> None:
         turn_chat_id = self._turn_chat_id
-        merged_tool_calls = tool_calls or self._turn_tool_calls
         if turn_chat_id == self.current_chat_id:
             self.main_panel_controller.complete_streaming_agent_turn(
                 content,
-                merged_tool_calls,
-                self._turn_reasoning,
             )
         else:
-            self._update_turn_assistant_in_store(
-                content,
-                merged_tool_calls,
-                self._turn_reasoning,
-            )
+            if content:
+                self._set_turn_final_answer_in_store(content)
             self.main_panel_controller.detach_inflight_agent_turn()
         self._clear_turn_state()
         self.window.statusBar().showMessage("Ready")
@@ -445,18 +486,7 @@ class AppController(QObject):
         elif turn_chat_id:
             chat = self.store.get(turn_chat_id)
             if chat is not None:
-                partial = ""
-                if chat.messages and chat.messages[-1].get("role") == "assistant":
-                    partial = (chat.messages[-1].get("content") or "").strip()
-                if partial:
-                    message = f"{partial}\n\n---\n\n**Error:** {error}"
-                else:
-                    message = f"Error: {error}"
-                self._update_turn_assistant_in_store(
-                    message,
-                    self._turn_tool_calls,
-                    self._turn_reasoning,
-                )
+                self._append_turn_delta_to_store(f"Error: {error}")
             self.main_panel_controller.detach_inflight_agent_turn()
         else:
             self.main_panel_controller.fail_agent_turn(error)
