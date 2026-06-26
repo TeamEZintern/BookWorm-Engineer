@@ -185,17 +185,27 @@ class Agent:
                     )
 
     def run_turn(self, event_handler: TurnEventHandler | None = None) -> str:
-        """Run one agent turn until the model returns a final assistant message."""
-        return self.run_turn_with_events(event_handler)
-
-    def run_turn_with_events(
-        self,
-        event_handler: TurnEventHandler | None = None,
-    ) -> str:
         """Run one agent turn, optionally emitting progress events."""
         self.clear_cancel()
+        turn_tool_calls: list[dict[str, Any]] = []
         try:
-            return self._run_turn(event_handler)
+            while True:
+                self._check_cancelled()
+                if event_handler is None:
+                    final_content = self._run_non_streaming_leg(
+                        turn_tool_calls,
+                        event_handler,
+                    )
+                else:
+                    final_content = self._run_streaming_leg(
+                        turn_tool_calls,
+                        event_handler,
+                    )
+
+                if final_content is not None:
+                    if event_handler and event_handler.on_turn_complete:
+                        event_handler.on_turn_complete(final_content, turn_tool_calls)
+                    return final_content
         except TurnCancelledError:
             raise
         except Exception as exc:
@@ -238,21 +248,6 @@ class Agent:
                     ),
                 }
             )
-
-    def _run_turn(self, event_handler: TurnEventHandler | None = None) -> str:
-        turn_tool_calls: list[dict[str, Any]] = []
-
-        while True:
-            self._check_cancelled()
-            if event_handler is None:
-                final_content = self._run_non_streaming_leg(turn_tool_calls, event_handler)
-            else:
-                final_content = self._run_streaming_leg(turn_tool_calls, event_handler)
-
-            if final_content is not None:
-                if event_handler and event_handler.on_turn_complete:
-                    event_handler.on_turn_complete(final_content, turn_tool_calls)
-                return final_content
 
     def _run_non_streaming_leg(
         self,

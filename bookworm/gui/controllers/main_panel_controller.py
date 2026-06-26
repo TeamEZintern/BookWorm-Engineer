@@ -562,15 +562,14 @@ class MainPanelController(QObject):
         detail.setFixedHeight(self._detail_height(body))
         detail.setVisible(False)
 
-        toggle.toggled.connect(
-            lambda checked: (
-                toggle.setArrowType(
-                    Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow
-                ),
-                detail.setVisible(checked),
-                self.refresh_message_layouts(),
+        def on_toggled(checked: bool) -> None:
+            toggle.setArrowType(
+                Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow
             )
-        )
+            detail.setVisible(checked)
+            self.refresh_message_layouts()
+
+        toggle.toggled.connect(on_toggled)
 
         layout.addWidget(toggle)
         layout.addWidget(detail)

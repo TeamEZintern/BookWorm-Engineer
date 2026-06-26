@@ -1,7 +1,7 @@
 """
 Background runner for Agent turns in the GUI.
 
-Runs ``Agent.run_turn_with_events()`` off the UI thread and emits Qt signals
+Runs ``Agent.run_turn()`` off the UI thread and emits Qt signals
 mirroring the agent event protocol.
 """
 
@@ -35,7 +35,7 @@ class _TurnWorker(QObject):
             on_turn_complete=self._on_turn_complete,
         )
         try:
-            self._agent.run_turn_with_events(handler)
+            self._agent.run_turn(handler)
         except TurnCancelledError:
             self.turn_cancelled.emit()
         except Exception as exc:
