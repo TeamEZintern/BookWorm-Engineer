@@ -189,6 +189,8 @@ def _triage_failure(
     validation_log: str,
     task_list: list[str],
     validation_report_json: str,
+    *,
+    stagnated: bool = False
 ) -> dict:
     raw = _llm(
         client,
@@ -272,6 +274,18 @@ def _build_validation_log_with_report(result, triage_json: str) -> str:
         + triage_json
         + "\n```"
     )
+
+def _failure_signature(result: ValidationResult) -> frozenset[str]:
+    """
+    Stable identity of a failing run, for stagnation dection.
+    Keyed on failed files + pytest node ids - NOT raw log text, which 
+    carries volatile timing lines that change every run."""
+    signature = set(result.failed_files)
+    for line in result.log.splitlines():
+        match = re.match(r"(FAILED|ERROR)\s+(\S+)", line.strip())
+        if match:
+            signature.add(f"{match.group(1)} {match.group(2)}")
+    return frozenset(signature)
 
 def _save_validation_attempt(artifacts_dir: Path, attempt: int, result: ValidationResult, files:dict[str, str]) -> None:
     """
@@ -455,6 +469,7 @@ def run_pipeline(
     )
 
     validation_ok = False
+    previous_signature: frozenset[str] | None = None 
 
     for attempt in range(1, MAX_VALIDATION_ATTEMPTS + 1):
         _write_files(output_dir, current_files)
@@ -482,6 +497,9 @@ def run_pipeline(
 
         structured_failed_files = _match_task_files(result.failed_files, task_list)
         fallback_files = structured_failed_files or _extract_affected_files(result.log, task_list)
+        signature = _failure_signature(result)
+        stagnated = bool(signature) and signature == previous_signature
+        previous_signature = signature
 
         try: 
             triage = _triage_failure(

@@ -247,7 +247,18 @@ def triage_prompt(
     validation_log: str,
     task_list: list[str],
     validation_report_json: str | None = None,
+    *,
+    stagnated: bool = False,
 ) -> str:
+    stagnation_note = ""
+    if stagnated:
+        stagnation_note = (
+            "IMPORTANT: A previous repair attempt produced the EXACT SAME"
+            "failing set. Repairing the implmentation again has not halped"
+            "Reconsider whether the TEST enocodes a wrong expectation: if a"
+            "pytest assertion contradicts the paper's success criteria, "
+            "classify it as test_bug and put the test file in affected_files.\n\n"
+        )
     files = "\n".join(f"- {filename}" for filename in task_list)
 
     structured_report = ""
@@ -282,6 +293,7 @@ def triage_prompt(
         "```text\n"
         f"{validation_log}\n"
         "```\n\n"
+        f"{stagnation_note}"
         "Return exactly this JSON shape:\n"
         "{\n"
         '  "failures": [\n'
