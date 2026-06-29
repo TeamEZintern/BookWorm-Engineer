@@ -5,6 +5,7 @@ Runs ``Agent.run_turn()`` off the UI thread and emits Qt signals
 mirroring the agent event protocol.
 """
 
+import traceback
 from typing import Any
 
 from PySide6.QtCore import QObject, QThread, Signal
@@ -20,7 +21,7 @@ class _TurnWorker(QObject):
     tool_call_started = Signal(str, str, str)
     tool_result = Signal(str, str)
     reasoning_delta = Signal(str)
-    failed = Signal(str)
+    failed = Signal(str, str)
 
     def __init__(self, agent: Agent):
         super().__init__()
@@ -39,7 +40,7 @@ class _TurnWorker(QObject):
         except TurnCancelledError:
             self.turn_cancelled.emit()
         except Exception as exc:
-            self.failed.emit(str(exc))
+            self.failed.emit(str(exc), traceback.format_exc())
 
     def _on_turn_complete(self, content: str, tool_calls: list[dict[str, Any]]) -> None:
         self.turn_complete.emit(content, tool_calls)
@@ -54,7 +55,7 @@ class AgentRunner(QObject):
     reasoning_delta = Signal(str)
     turn_complete = Signal(str, list)
     turn_cancelled = Signal()
-    error = Signal(str)
+    error = Signal(str, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)

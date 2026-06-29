@@ -163,7 +163,7 @@ class AppController(QObject):
         """Update the side panel with current chats."""
         self.side_panel_controller.update_chat_list(self.store.all())
 
-    def _save_current_chat(self) -> None:
+    def _save_current_chat(self, *, refresh_side_panel: bool = False) -> None:
         """Persist the active chat into the current chat JSON file."""
         if self._loading_conversation or not self.current_chat_id:
             return
@@ -180,6 +180,8 @@ class AppController(QObject):
         chat.draft = self.main_panel_controller.get_draft()
         chat.updated_at = datetime.now()
         self.store.save(chat)
+        if refresh_side_panel:
+            self.update_side_panel()
 
     def _persist_turn_chat(self, chat_id: str) -> None:
         """Save the chat that owns an in-flight turn, including partial assistant text."""
@@ -193,6 +195,7 @@ class AppController(QObject):
             chat.draft = self.main_panel_controller.get_draft()
         chat.updated_at = datetime.now()
         self.store.save(chat)
+        self.update_side_panel()
 
     def _assistant_message_dict(
         self,
@@ -261,6 +264,35 @@ class AppController(QObject):
             return
         chat.updated_at = datetime.now()
         self.store.save(chat)
+
+    def _insert_turn_error_detail_in_store(self, detail: str) -> None:
+        if not detail:
+            return
+        assistant_message = self._ensure_turn_assistant_in_store()
+        if assistant_message is None:
+            return
+        content = assistant_message["content"]
+        part = {"type": "error_detail", "text": detail}
+        for index, existing in enumerate(content):
+            if existing.get("type") == "final_answer":
+                content.insert(index, part)
+                break
+        else:
+            content.append(part)
+        chat = self.store.get(self._turn_chat_id)
+        if chat is None:
+            return
+        chat.updated_at = datetime.now()
+        self.store.save(chat)
+
+    def _turn_final_answer_text_in_store(self) -> str:
+        assistant_message = self._ensure_turn_assistant_in_store()
+        if assistant_message is None:
+            return ""
+        for part in reversed(assistant_message["content"]):
+            if part.get("type") == "final_answer":
+                return part.get("text", "")
+        return ""
 
     def _set_turn_final_answer_in_store(self, content: str) -> None:
         assistant_message = self._ensure_turn_assistant_in_store()
@@ -400,6 +432,7 @@ class AppController(QObject):
                 self.store.save(chat)
             self.main_panel_controller.detach_inflight_agent_turn()
         self._clear_turn_state()
+        self.update_side_panel()
         self._sync_agent_from_panel()
         self.window.statusBar().showMessage("Stopped")
 
@@ -477,24 +510,35 @@ class AppController(QObject):
                 self._set_turn_final_answer_in_store(content)
             self.main_panel_controller.detach_inflight_agent_turn()
         self._clear_turn_state()
+        self.update_side_panel()
         self.window.statusBar().showMessage("Ready")
 
-    def _on_agent_error(self, error: str) -> None:
+    def _on_agent_error(self, error: str, error_detail: str) -> None:
         turn_chat_id = self._turn_chat_id
         if turn_chat_id == self.current_chat_id:
-            self.main_panel_controller.fail_agent_turn(error)
+            self.main_panel_controller.fail_agent_turn(error, error_detail)
         elif turn_chat_id:
             chat = self.store.get(turn_chat_id)
             if chat is not None:
-                self._append_turn_delta_to_store(f"Error: {error}")
+                detail = (error_detail or error).strip()
+                if detail:
+                    self._insert_turn_error_detail_in_store(detail)
+                partial = self._turn_final_answer_text_in_store().strip()
+                summary = (
+                    f"An error occurred: {error}. "
+                    "See stack trace above for details."
+                )
+                final_text = f"{partial}\n\n{summary}" if partial else summary
+                self._set_turn_final_answer_in_store(final_text)
             self.main_panel_controller.detach_inflight_agent_turn()
         else:
-            self.main_panel_controller.fail_agent_turn(error)
+            self.main_panel_controller.fail_agent_turn(error, error_detail)
         self._clear_turn_state()
+        self.update_side_panel()
         self.window.statusBar().showMessage(f"Error: {error}")
 
     def _on_messages_changed(self) -> None:
-        self._save_current_chat()
+        self._save_current_chat(refresh_side_panel=True)
 
     def _on_draft_changed(self) -> None:
         self._save_current_chat()
