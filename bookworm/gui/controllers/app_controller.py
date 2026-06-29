@@ -163,7 +163,7 @@ class AppController(QObject):
         """Update the side panel with current chats."""
         self.side_panel_controller.update_chat_list(self.store.all())
 
-    def _save_current_chat(self) -> None:
+    def _save_current_chat(self, *, refresh_side_panel: bool = False) -> None:
         """Persist the active chat into the current chat JSON file."""
         if self._loading_conversation or not self.current_chat_id:
             return
@@ -180,6 +180,8 @@ class AppController(QObject):
         chat.draft = self.main_panel_controller.get_draft()
         chat.updated_at = datetime.now()
         self.store.save(chat)
+        if refresh_side_panel:
+            self.update_side_panel()
 
     def _persist_turn_chat(self, chat_id: str) -> None:
         """Save the chat that owns an in-flight turn, including partial assistant text."""
@@ -193,6 +195,7 @@ class AppController(QObject):
             chat.draft = self.main_panel_controller.get_draft()
         chat.updated_at = datetime.now()
         self.store.save(chat)
+        self.update_side_panel()
 
     def _assistant_message_dict(
         self,
@@ -429,6 +432,7 @@ class AppController(QObject):
                 self.store.save(chat)
             self.main_panel_controller.detach_inflight_agent_turn()
         self._clear_turn_state()
+        self.update_side_panel()
         self._sync_agent_from_panel()
         self.window.statusBar().showMessage("Stopped")
 
@@ -506,6 +510,7 @@ class AppController(QObject):
                 self._set_turn_final_answer_in_store(content)
             self.main_panel_controller.detach_inflight_agent_turn()
         self._clear_turn_state()
+        self.update_side_panel()
         self.window.statusBar().showMessage("Ready")
 
     def _on_agent_error(self, error: str, error_detail: str) -> None:
@@ -529,10 +534,11 @@ class AppController(QObject):
         else:
             self.main_panel_controller.fail_agent_turn(error, error_detail)
         self._clear_turn_state()
+        self.update_side_panel()
         self.window.statusBar().showMessage(f"Error: {error}")
 
     def _on_messages_changed(self) -> None:
-        self._save_current_chat()
+        self._save_current_chat(refresh_side_panel=True)
 
     def _on_draft_changed(self) -> None:
         self._save_current_chat()
