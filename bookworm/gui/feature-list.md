@@ -85,8 +85,10 @@ Agent responses rendered as formatted markdown
 
 - [x] Markdown parsing from raw LLM output
 - [x] Advanced format render
-- [x] Collapsible sections for tool execution and thinking/reasoning
+- [ ] Collapsible sections for tool execution, thinking/reasoning, and stack trace
   - [x] Wire Agent event protocol (`text_delta`, `tool_call_*`, `reasoning_delta`); tool calls and reasoning render as collapsed assistant-message detail sections.
+  - [ ] When an agent turn fails (e.g. upstream provider error), show the full stack trace / error detail in a collapsible section, same style as reasoning and tool calls.
+    - [ ] Persist the stack trace in chat JSON as its own assistant content part (e.g. `type: "error_detail"`) so it survives reload and matches the chronological part order used elsewhere.
 - [x] Copy button, Redo button, and Timestamp display at the bottom
   - [x] Copy means to copy the raw markdown of the agent output.
   - [x] Redo means re-prompting the agent with the same user input to get a new response, often because the original output had a glitch or the user was not satisfied with it.

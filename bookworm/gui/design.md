@@ -147,6 +147,26 @@ Each chat is stored as a JSON file on disk inside `.bookworm/chats/`:
         }
       ],
       "timestamp": "2026-06-17T10:30:05Z"
+    },
+    {
+      "role": "user",
+      "content": "Suppose this prompt causes agent to produce an error.",
+      "timestamp": "2026-06-17T10:35:00Z"
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "error_detail",
+          "text": "es_config': {'type': <DynamicShapesType.BACKED: 'backed'>}, 'local_cache_dir': None}\n(EngineCore_DP0 pid=25) INFO 12-14 20:43:07 [cpu_worker.py:192] auto thread-binding list (id, physical core): [(2, 0), (3, 1)]
+get_mempolicy: Operation not permitted\n"
+        },
+        {
+          "type": "final_answer",
+          "text": "EngineCore encountered an issue. See stack trace (above) for the root cause."
+        }
+      ],
+      "timestamp": "2026-06-17T10:36:00Z"
     }
   ]
 }
