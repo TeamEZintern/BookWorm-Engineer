@@ -64,6 +64,45 @@ def test_validate_chat_data_rejects_non_string_draft():
         })
 
 
+def test_message_append_error_detail_inserts_before_final_answer():
+    message = Message.assistant()
+    message.append_final_answer_delta("Partial reply")
+    message.append_error_detail("Traceback (most recent call last):\n  ...")
+
+    assert message.parts == [
+        {"type": "error_detail", "text": "Traceback (most recent call last):\n  ..."},
+        {"type": "final_answer", "text": "Partial reply"},
+    ]
+
+
+def test_message_append_error_detail_appends_when_no_final_answer():
+    message = Message.assistant()
+    message.append_reasoning_delta("Thinking...")
+    message.append_error_detail("provider timeout")
+
+    assert message.parts == [
+        {"type": "reasoning", "text": "Thinking..."},
+        {"type": "error_detail", "text": "provider timeout"},
+    ]
+
+
+def test_message_error_detail_round_trip_dict():
+    message = Message(
+        role="assistant",
+        content=[
+            {"type": "error_detail", "text": "long stack trace"},
+            {
+                "type": "final_answer",
+                "text": "An error occurred. See stack trace above for details.",
+            },
+        ],
+    )
+
+    restored = Message.from_dict(message.to_dict())
+    assert restored.parts == message.parts
+    assert restored.text == "An error occurred. See stack trace above for details."
+
+
 def test_chat_store_save_load_and_delete(tmp_path):
     store = ChatStore(tmp_path / "chats")
     chat = Chat(

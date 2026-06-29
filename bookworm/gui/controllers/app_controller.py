@@ -262,6 +262,35 @@ class AppController(QObject):
         chat.updated_at = datetime.now()
         self.store.save(chat)
 
+    def _insert_turn_error_detail_in_store(self, detail: str) -> None:
+        if not detail:
+            return
+        assistant_message = self._ensure_turn_assistant_in_store()
+        if assistant_message is None:
+            return
+        content = assistant_message["content"]
+        part = {"type": "error_detail", "text": detail}
+        for index, existing in enumerate(content):
+            if existing.get("type") == "final_answer":
+                content.insert(index, part)
+                break
+        else:
+            content.append(part)
+        chat = self.store.get(self._turn_chat_id)
+        if chat is None:
+            return
+        chat.updated_at = datetime.now()
+        self.store.save(chat)
+
+    def _turn_final_answer_text_in_store(self) -> str:
+        assistant_message = self._ensure_turn_assistant_in_store()
+        if assistant_message is None:
+            return ""
+        for part in reversed(assistant_message["content"]):
+            if part.get("type") == "final_answer":
+                return part.get("text", "")
+        return ""
+
     def _set_turn_final_answer_in_store(self, content: str) -> None:
         assistant_message = self._ensure_turn_assistant_in_store()
         if assistant_message is None:
@@ -479,17 +508,26 @@ class AppController(QObject):
         self._clear_turn_state()
         self.window.statusBar().showMessage("Ready")
 
-    def _on_agent_error(self, error: str) -> None:
+    def _on_agent_error(self, error: str, error_detail: str) -> None:
         turn_chat_id = self._turn_chat_id
         if turn_chat_id == self.current_chat_id:
-            self.main_panel_controller.fail_agent_turn(error)
+            self.main_panel_controller.fail_agent_turn(error, error_detail)
         elif turn_chat_id:
             chat = self.store.get(turn_chat_id)
             if chat is not None:
-                self._append_turn_delta_to_store(f"Error: {error}")
+                detail = (error_detail or error).strip()
+                if detail:
+                    self._insert_turn_error_detail_in_store(detail)
+                partial = self._turn_final_answer_text_in_store().strip()
+                summary = (
+                    f"An error occurred: {error}. "
+                    "See stack trace above for details."
+                )
+                final_text = f"{partial}\n\n{summary}" if partial else summary
+                self._set_turn_final_answer_in_store(final_text)
             self.main_panel_controller.detach_inflight_agent_turn()
         else:
-            self.main_panel_controller.fail_agent_turn(error)
+            self.main_panel_controller.fail_agent_turn(error, error_detail)
         self._clear_turn_state()
         self.window.statusBar().showMessage(f"Error: {error}")
 

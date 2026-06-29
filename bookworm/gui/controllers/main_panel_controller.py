@@ -639,6 +639,15 @@ class MainPanelController(QObject):
                         "body": self._format_tool_call_detail(part, result),
                     }
                 )
+            elif part_type == "error_detail" and part.get("text", "").strip():
+                renderables.append(
+                    {
+                        "type": "error_detail",
+                        "key": f"error_detail:{part_index}",
+                        "title": "Error details",
+                        "body": part["text"].strip(),
+                    }
+                )
             elif part_type == "final_answer" and part.get("text"):
                 renderables.append(
                     {
@@ -893,30 +902,42 @@ class MainPanelController(QObject):
         self._finish_agent_turn()
         self.messages_changed.emit()
 
-    def fail_agent_turn(self, error: str) -> None:
+    def _error_final_answer_text(self, error: str, partial: str = "") -> str:
+        summary = (
+            f"An error occurred: {error}. See stack trace above for details."
+        )
+        if partial:
+            return f"{partial}\n\n{summary}"
+        return summary
+
+    def fail_agent_turn(self, error: str, error_detail: str | None = None) -> None:
         """Show an agent failure in the conversation."""
         if not self.is_processing:
             return
 
+        detail = (error_detail or error).strip()
         if self._streaming_message is not None:
             partial = self._streaming_message.text.strip()
-            if partial:
-                self._streaming_message.set_final_answer(
-                    f"{partial}\n\n---\n\n**Error:** {error}"
-                )
-            else:
-                self._streaming_message.set_final_answer(f"Error: {error}")
+            if detail:
+                self._streaming_message.append_error_detail(detail)
+            self._streaming_message.set_final_answer(
+                self._error_final_answer_text(error, partial)
+            )
             self._refresh_assistant_parts(self._streaming_message)
             self._streaming_message = None
             self._streaming_tool_calls = []
             self._streaming_reasoning = ""
         else:
-            self.add_message(
-                Message(
-                    role="assistant",
-                    content=[{"type": "final_answer", "text": f"Error: {error}"}],
-                )
+            content: list[dict] = []
+            if detail:
+                content.append({"type": "error_detail", "text": detail})
+            content.append(
+                {
+                    "type": "final_answer",
+                    "text": self._error_final_answer_text(error),
+                }
             )
+            self.add_message(Message(role="assistant", content=content))
         self._finish_agent_turn()
         self.messages_changed.emit()
 

@@ -75,6 +75,17 @@ class Message:
             }
         )
 
+    def append_error_detail(self, text: str) -> None:
+        """Insert stack trace / error logs before the final answer, if any."""
+        if not isinstance(self.content, list):
+            self.content = []
+        part = {"type": "error_detail", "text": text}
+        for index, existing in enumerate(self.content):
+            if existing.get("type") == "final_answer":
+                self.content.insert(index, part)
+                return
+        self.content.append(part)
+
     def append_final_answer_delta(self, delta: str) -> None:
         if not isinstance(self.content, list):
             self.content = []
