@@ -11,7 +11,7 @@ DRAFT_KEY = "draft"
 REQUIRED_CHAT_KEYS = {"id", "name", "created_at", "updated_at", "messages"}
 REQUIRED_MESSAGE_KEYS = {"role", "content", "timestamp"}
 VALID_ROLES = {"user", "assistant", "system"}
-ASSISTANT_PART_TYPES = {"reasoning", "tool_call", "tool_result", "final_answer"}
+ASSISTANT_PART_TYPES = {"reasoning", "tool_call", "tool_result", "final_answer", "error_detail"}
 
 
 def default_chat_name(when: Optional[datetime] = None) -> str:
@@ -52,7 +52,7 @@ def validate_assistant_part(part: Any) -> None:
     part_type = part.get("type")
     if part_type not in ASSISTANT_PART_TYPES:
         raise ValueError(f"invalid assistant content part type: {part_type!r}")
-    if part_type in {"reasoning", "final_answer"}:
+    if part_type in {"reasoning", "final_answer", "error_detail"}:
         if not isinstance(part.get("text"), str):
             raise ValueError(f"{part_type} part text must be a string")
         return

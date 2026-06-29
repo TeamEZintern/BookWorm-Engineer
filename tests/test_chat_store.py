@@ -64,6 +64,51 @@ def test_validate_chat_data_rejects_non_string_draft():
         })
 
 
+def test_validate_chat_data_accepts_error_detail_part():
+    validate_chat_data({
+        "id": "x",
+        "name": "Error chat",
+        "created_at": "2026-06-17T10:30:00",
+        "updated_at": "2026-06-17T11:15:00",
+        "messages": [
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "error_detail", "text": "Traceback...\n"},
+                    {"type": "final_answer", "text": "An error occurred."},
+                ],
+                "timestamp": "2026-06-17T10:36:00Z",
+            }
+        ],
+    })
+
+
+def test_chat_store_loads_chat_with_error_detail(tmp_path):
+    store = ChatStore(tmp_path / "chats")
+    chat = Chat(
+        chat_id="err-chat",
+        name="Failed turn",
+        created_at=datetime(2026, 6, 17, 10, 30, 0),
+        updated_at=datetime(2026, 6, 17, 11, 15, 0),
+        messages=[
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "error_detail", "text": "Traceback...\n"},
+                    {"type": "final_answer", "text": "An error occurred."},
+                ],
+                "timestamp": "2026-06-17T10:36:00Z",
+            }
+        ],
+    )
+    store.add(chat)
+
+    reloaded = ChatStore(tmp_path / "chats")
+    reloaded.load()
+    assert len(reloaded.all()) == 1
+    assert reloaded.get("err-chat").messages[0]["content"][0]["type"] == "error_detail"
+
+
 def test_message_append_error_detail_inserts_before_final_answer():
     message = Message.assistant()
     message.append_final_answer_delta("Partial reply")
