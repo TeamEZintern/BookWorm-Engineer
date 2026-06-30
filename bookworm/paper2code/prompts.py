@@ -67,6 +67,8 @@ def success_criteria_prompt(paper_text: str, overall_plan: str) -> str:
         '      "id": "C1",\n'
         '      "claim": "...",\n'
         '      "expected_behavior": "...",\n'
+        '      "invariant": "property any correct output must satisfy, checked against '
+        'the inputs (not a hand-computed value); null if none exists",\n'
         '      "test_strategy": "...",\n'
         '      "source_section": "...",\n'
         '      "confidence": "high | medium | low"\n'
@@ -94,6 +96,12 @@ def success_criteria_prompt(paper_text: str, overall_plan: str) -> str:
         "Rules:\n"
         "- Do not invent results not stated in the paper.\n"
         "- Prefer criteria that can become deterministic pytest tests.\n"
+        "- For each unit_test_criterion, give an `invariant` when one exists: a property "
+        "true by definition that any correct output must satisfy (e.g. outputs satisfy "
+        "the defining equation; a reconstruction reproduces the input distance matrix), "
+        "checkable against the inputs without a hand-computed answer.\n"
+        "- Prefer invariant-based criteria; rely on a specific expected_behavior value "
+        "only when the paper states it explicitly.\n"
         "- Put large training runs under reproducibility_criteria.\n"
         "- Put vague or underspecified claims under unverifiable_claims.\n"
         "- Return JSON only and close every array and object."
@@ -217,6 +225,25 @@ def coding_prompt(
         else ""
     )
 
+    name = filename.replace("\\", "/")
+    base = name.rsplit("/", 1)[-1]
+    is_test = "tests/" in name or base.startswith("test_") or base.endswith("_test.py")
+    test_guidance = (
+        "Test-writing priority — most reliable first:\n"
+        "1. Prefer INVARIANTS that are true by definition: properties any correct "
+        "output must satisfy, checked against the inputs rather than a hand-computed "
+        "answer (e.g. a returned intersection point must satisfy every input sphere "
+        "equation; a valid reconstruction must reproduce the input distance matrix; a "
+        "sorted result must be an ordered permutation of its input).\n"
+        "2. When cheap, cross-check the implementation against an obviously-correct "
+        "brute-force reference computed inside the test itself.\n"
+        "3. Hardcode an expected numeric answer ONLY when the paper states it, or when "
+        "you also assert the defining invariant alongside it.\n"
+        "Never make a hand-computed 'magic' number the sole assertion — if your "
+        "arithmetic is off the test is silently wrong. Favor assertions that cannot be "
+        "hallucinated.\n\n"
+    ) if is_test else ""
+
     return (
         "Here is a research paper:\n\n"
         f"{paper_text}\n\n"
@@ -230,6 +257,7 @@ def coding_prompt(
         f"Analysis for `{filename}`:\n"
         f"{file_analysis}\n\n"
         f"Implement `{filename}` completely.\n\n"
+        f"{test_guidance}"
         "Rules:\n"
         f"- If `{filename}` is under tests/, write pytest tests only.\n"
         f"- If `{filename}` is not under tests/, write production code only.\n"
@@ -247,21 +275,10 @@ def triage_prompt(
     validation_log: str,
     task_list: list[str],
     validation_report_json: str | None = None,
-    *,
-    stagnated: bool = False,
 ) -> str:
-    stagnation_note = ""
-    if stagnated:
-        stagnation_note = (
-            "IMPORTANT: A previous repair attempt produced the EXACT SAME"
-            "failing set. Repairing the implmentation again has not halped"
-            "Reconsider whether the TEST enocodes a wrong expectation: if a"
-            "pytest assertion contradicts the paper's success criteria, "
-            "classify it as test_bug and put the test file in affected_files.\n\n"
-        )
     files = "\n".join(f"- {filename}" for filename in task_list)
 
-    structured_report = ""
+    structured_report =""
     if validation_report_json:
         structured_report = (
             "Structured validation report:\n"
@@ -293,7 +310,6 @@ def triage_prompt(
         "```text\n"
         f"{validation_log}\n"
         "```\n\n"
-        f"{stagnation_note}"
         "Return exactly this JSON shape:\n"
         "{\n"
         '  "failures": [\n'
