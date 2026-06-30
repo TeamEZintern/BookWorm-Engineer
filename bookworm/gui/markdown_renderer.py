@@ -168,17 +168,6 @@ def create_markdown_view() -> QTextEdit:
     return view
 
 
-# Backwards-compatible alias
-create_markdown_browser = create_markdown_view
-
-
-def create_markdown_widget(content: str, colors: Dict[str, str]):
-    """Create a markdown view pre-populated with content."""
-    view = create_markdown_view()
-    update_markdown_widget(view, content, colors)
-    return view
-
-
 def update_markdown_widget(
     view,
     content: str,
