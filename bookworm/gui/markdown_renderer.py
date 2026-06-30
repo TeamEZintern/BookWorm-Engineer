@@ -2,6 +2,7 @@
 
 import re
 from typing import Callable, Dict, Optional
+from PySide6.QtCore import QTimer
 
 import markdown
 from pygments.formatters import HtmlFormatter
@@ -117,8 +118,6 @@ def _adjust_view_height(view) -> None:
 
 
 def _schedule_view_height(view) -> None:
-    from PySide6.QtCore import QTimer
-
     QTimer.singleShot(0, lambda: _adjust_view_height(view))
 
 
@@ -187,8 +186,6 @@ def update_markdown_widget(
     is_valid: Optional[Callable[[], bool]] = None,
 ) -> None:
     """Re-render markdown HTML and resize the widget."""
-    from PySide6.QtCore import QTimer
-
     def apply() -> None:
         if is_valid is not None and not is_valid():
             return
@@ -196,6 +193,10 @@ def update_markdown_widget(
             return
         _ensure_view_hooks(view)
         view.setHtml(render_markdown_html(content, colors))
-        _schedule_view_height(view)
+        _adjust_view_height(view)
 
-    QTimer.singleShot(0, apply)
+    if _is_embedded(view):
+        apply()
+    else:
+        QTimer.singleShot(0, apply)
+

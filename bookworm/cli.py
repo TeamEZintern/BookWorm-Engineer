@@ -24,7 +24,6 @@ def main() -> int:
 
     if interface == "gui":
         from PySide6.QtWidgets import QApplication
-        from PySide6.QtCore import QTimer
         from .gui import AppController, GUIConfig
         from .gui.qt_message_filter import install_gui_qt_message_filter
 
@@ -33,7 +32,7 @@ def main() -> int:
         gui_config = GUIConfig.from_config(config)
         controller = AppController(config, gui_config)
         controller.window.show()
-        QTimer.singleShot(0, controller.main_panel_controller.refresh_message_layouts)
+        controller.main_panel_controller.defer_layout_refresh()
         return app.exec()
     
     if interface == "cli":
