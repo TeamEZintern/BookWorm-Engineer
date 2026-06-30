@@ -67,6 +67,8 @@ def success_criteria_prompt(paper_text: str, overall_plan: str) -> str:
         '      "id": "C1",\n'
         '      "claim": "...",\n'
         '      "expected_behavior": "...",\n'
+        '      "invariant": "property any correct output must satisfy, checked against '
+        'the inputs (not a hand-computed value); null if none exists",\n'
         '      "test_strategy": "...",\n'
         '      "source_section": "...",\n'
         '      "confidence": "high | medium | low"\n'
@@ -94,6 +96,12 @@ def success_criteria_prompt(paper_text: str, overall_plan: str) -> str:
         "Rules:\n"
         "- Do not invent results not stated in the paper.\n"
         "- Prefer criteria that can become deterministic pytest tests.\n"
+        "- For each unit_test_criterion, give an `invariant` when one exists: a property "
+        "true by definition that any correct output must satisfy (e.g. outputs satisfy "
+        "the defining equation; a reconstruction reproduces the input distance matrix), "
+        "checkable against the inputs without a hand-computed answer.\n"
+        "- Prefer invariant-based criteria; rely on a specific expected_behavior value "
+        "only when the paper states it explicitly.\n"
         "- Put large training runs under reproducibility_criteria.\n"
         "- Put vague or underspecified claims under unverifiable_claims.\n"
         "- Return JSON only and close every array and object."
@@ -217,6 +225,32 @@ def coding_prompt(
         else ""
     )
 
+    name = filename.replace("\\", "/")
+    base = name.rsplit("/", 1)[-1]
+    is_test = "tests/" in name or base.startswith("test_") or base.endswith("_test.py")
+    test_guidance = (
+        "SCOPE — write tests ONLY for the success criteria listed above; every test "
+        "must map to one. Do NOT invent edge cases the criteria don't state — degenerate "
+        "or singular inputs, error/exception paths, boundary conditions — unless a "
+        "criterion explicitly calls for that behavior. Unanchored edge-case tests assert "
+        "behavior the paper never specifies, so neither the code nor the test can be "
+        "shown correct, and the repair loop cannot converge on them.\n\n"
+        "Test-writing priority — most reliable first:\n"
+        "1. Prefer INVARIANTS that are true by definition: properties any correct "
+        "output must satisfy, checked against the inputs rather than a hand-computed "
+        "answer (e.g. a returned intersection point must satisfy every input sphere "
+        "equation; a valid reconstruction must reproduce the input distance matrix; a "
+        "sorted result must be an ordered permutation of its input).\n"
+        "2. When cheap, cross-check the implementation against an obviously-correct "
+        "brute-force reference computed inside the test itself.\n"
+        "3. Hardcode an expected numeric answer ONLY when the paper states it, or when "
+        "you also assert the defining invariant alongside it.\n"
+        "Never make a hand-computed 'magic' number the sole assertion — if your "
+        "arithmetic is off the test is silently wrong. Favor assertions that cannot be "
+        "hallucinated.\n"
+        "Tag each test with the criterion id it covers in a comment (e.g. `# C3`).\n\n"
+    ) if is_test else ""
+
     return (
         "Here is a research paper:\n\n"
         f"{paper_text}\n\n"
@@ -230,12 +264,13 @@ def coding_prompt(
         f"Analysis for `{filename}`:\n"
         f"{file_analysis}\n\n"
         f"Implement `{filename}` completely.\n\n"
+        f"{test_guidance}"
         "Rules:\n"
         f"- If `{filename}` is under tests/, write pytest tests only.\n"
         f"- If `{filename}` is not under tests/, write production code only.\n"
         "- Do not put pytest imports, test functions, unittest classes, "
         "fixtures, or assertion-based unit tests in production files.\n"
-        "- Test deterministic behavior, shapes, edge cases, and smoke paths.\n"
+        "- Test deterministic behavior and shapes; cover an edge case only when a success criterion specifies it.\n"
         "- Do not require network access, GPUs, large datasets, or long runs.\n"
         "- Do not add a test-running __main__ block.\n"
         "- A planned entry point may include a minimal guarded CLI or demo.\n"
@@ -250,7 +285,7 @@ def triage_prompt(
 ) -> str:
     files = "\n".join(f"- {filename}" for filename in task_list)
 
-    structured_report = ""
+    structured_report =""
     if validation_report_json:
         structured_report = (
             "Structured validation report:\n"

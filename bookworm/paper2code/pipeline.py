@@ -273,6 +273,18 @@ def _build_validation_log_with_report(result, triage_json: str) -> str:
         + "\n```"
     )
 
+def _failure_signature(result: ValidationResult) -> frozenset[str]:
+    """
+    Stable identity of a failing run, for stagnation detection.
+    Keyed on failed files + pytest node ids - NOT raw log text, which 
+    carries volatile timing lines that change every run."""
+    signature = set(result.failed_files)
+    for line in result.log.splitlines():
+        match = re.match(r"(FAILED|ERROR)\s+(\S+)", line.strip())
+        if match:
+            signature.add(f"{match.group(1)} {match.group(2)}")
+    return frozenset(signature)
+
 def _save_validation_attempt(artifacts_dir: Path, attempt: int, result: ValidationResult, files:dict[str, str]) -> None:
     """
     Save full validation artifacts for one attempt.
@@ -455,6 +467,10 @@ def run_pipeline(
     )
 
     validation_ok = False
+    stalled = False
+    best_files = current_files.copy()
+    best_signature: frozenset[str] | None = None
+    seen_signatures: set[frozenset[str]] = set()
 
     for attempt in range(1, MAX_VALIDATION_ATTEMPTS + 1):
         _write_files(output_dir, current_files)
@@ -473,8 +489,25 @@ def run_pipeline(
             artifacts.save(artifacts_dir, "validation/result.txt", "passed")
 
             _promote_validated_code(artifacts_dir,current_files)
-
+            best_files = current_files
             break
+
+        signature = _failure_signature(result)
+
+        # Guard 1  keep-best: adopt this state as the repair base if it did NOT regress vs the best failing state seen so far
+        if best_signature is None or len(signature) < len(best_signature):
+            best_files = current_files.copy()
+            best_signature = signature
+        
+        # Guard 2 - revisit/stagnation: this exact failing set already appeared
+        # so repair is cycling, not converging. Stop instead of burning attempts.
+        if signature in seen_signatures:
+            stalled = True
+            artifacts.save(artifacts_dir, "validation/result.txt", "stalled")
+            print(f"Validation stalled at attempt {attempt}: failing set repeated; stopping.")
+            break
+
+        seen_signatures.add(signature)
 
         if attempt == MAX_VALIDATION_ATTEMPTS:
             artifacts.save(artifacts_dir,"validation/result.txt","failed")
@@ -556,7 +589,7 @@ def run_pipeline(
             f"{len(affected_files)} affected file(s), attempt {attempt}..."
         )
 
-        repaired_files = current_files.copy()
+        repaired_files = best_files.copy()
 
         for filename in affected_files:
             raw = _llm(
@@ -569,7 +602,7 @@ def run_pipeline(
                     success_criteria_raw,
                     logic_raw,
                     filename,
-                    current_files[filename],
+                    best_files[filename],
                     repair_log,
                     repaired_files,
                 )
@@ -589,9 +622,12 @@ def run_pipeline(
         _save_files_artifact(artifacts_dir,"candidate_code",current_files,)
         _save_files_artifact(artifacts_dir, f"candidate_snapshots/attempt_{attempt}", current_files)
 
-    _write_files(output_dir,current_files)
+    current_files = best_files
 
-    validation_status = "passed" if validation_ok else "failed"
+    _write_files(output_dir,current_files) 
+    validation_status = "passed" if validation_ok else ("stalled" if stalled else "failed")
+    stuck = sorted(s for s in (best_signature or set()) if s.startswith(("FAILED", "ERROR")))
+    stuck_section = ("Unresolved tests:\n" + "\n".join(f"  - {s}" for s in stuck) + "\n") if stuck else ""
 
     packages = logic.get("packages", [])
     package_list = ", ".join(packages) if packages else "none listed"
@@ -600,5 +636,6 @@ def run_pipeline(
         f"Generated {len(task_list)} files in {output_dir}\n"
         f"Validation: {validation_status}\n"
         f"Required packages: {package_list}\n"
+        f"{stuck_section}"
         f"Artifacts saved to: {artifacts_dir}"
     )
