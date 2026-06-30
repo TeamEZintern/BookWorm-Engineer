@@ -3,7 +3,6 @@ import re
 from pathlib import Path
 
 from openai import OpenAI
-import os
 
 from ..config import Config
 from . import artifacts, prompts
