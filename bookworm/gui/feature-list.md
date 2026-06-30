@@ -177,8 +177,6 @@ bookworm/gui/
 │   │   ├── main_panel.ui
 │   │   └── ui_main_panel.py
 │   └── widget/
-│       ├── message_bubble.ui
-│       ├── ui_message_bubble.py
 │       ├── chat_item.ui
 │       └── ui_chat_item.py
 │

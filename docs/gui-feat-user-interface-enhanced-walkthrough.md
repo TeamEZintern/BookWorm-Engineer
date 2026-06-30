@@ -62,7 +62,7 @@ bookworm/gui/
 ├── views/            # .ui layouts + generated ui_*.py (do not hand-edit ui_*.py)
 │   ├── window/     # QMainWindow shell + splitter
 │   ├── panel/      # side_panel.ui, main_panel.ui
-│   └── widget/     # chat_item.ui, message_bubble.ui (mostly legacy/unused for bubbles)
+│   └── widget/     # chat_item.ui (side-panel chat rows)
 ├── controllers/    # Behaviour
 │   ├── app_controller.py
 │   ├── side_panel_controller.py

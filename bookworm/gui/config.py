@@ -23,7 +23,6 @@ class GUIConfig:
     main_panel_min_height: int = 400
     
     # Message display settings
-    message_bubble_max_width: int = 600
     show_timestamps: bool = True
     timestamp_format: str = "HH:mm"
     
