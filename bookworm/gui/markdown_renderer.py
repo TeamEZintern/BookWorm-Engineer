@@ -3,6 +3,7 @@
 import re
 from typing import Callable, Dict, Optional
 from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QTextEdit
 
 import markdown
 from pygments.formatters import HtmlFormatter
@@ -129,7 +130,7 @@ def _configure_view(view) -> None:
     view.setFrameShape(QFrame.Shape.NoFrame)
     view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
     view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-    view.setStyleSheet("background: transparent;")
+    view.setStyleSheet("background: transparent; border-style: none;")
     view.setTextInteractionFlags(
         Qt.TextInteractionFlag.TextSelectableByMouse
         | Qt.TextInteractionFlag.LinksAccessibleByMouse
@@ -146,11 +147,10 @@ def _ensure_view_hooks(view) -> None:
     view._markdown_hooks_ready = True
 
 
-def create_markdown_view():
+def create_markdown_view() -> QTextEdit:
     """Create an empty read-only rich-text view (populate after adding to layout)."""
     from PySide6.QtCore import Qt, QUrl
     from PySide6.QtGui import QDesktopServices
-    from PySide6.QtWidgets import QTextEdit
 
     class MarkdownView(QTextEdit):
         """Read-only rich text with external link support."""
