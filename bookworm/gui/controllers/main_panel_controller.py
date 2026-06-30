@@ -108,6 +108,10 @@ class MainPanelController(QObject):
         """Schedule a single coalesced layout refresh."""
         self._layout_refresh_timer.start()
 
+    def defer_layout_refresh(self) -> None:
+        """Run a layout refresh on the next event-loop turn (after show/insert)."""
+        QTimer.singleShot(0, self._do_refresh_message_layouts)
+
     def _do_refresh_message_layouts(self) -> None:
         """Recompute bubble widths and markdown heights after the panel is laid out."""
         max_width = self._message_content_max_width()
@@ -310,7 +314,7 @@ class MainPanelController(QObject):
 
     def _after_load_messages(self) -> None:
         try:
-            self.refresh_message_layouts()
+            self._do_refresh_message_layouts()
             self.scroll_to_bottom()
         finally:
             self._suppress_layout_refresh = False
@@ -975,7 +979,7 @@ class MainPanelController(QObject):
                 self.display_message(msg, render_markdown=False)
         finally:
             self._suppress_layout_refresh = False
-        QTimer.singleShot(0, self.refresh_message_layouts)
+        self.defer_layout_refresh()
 
     def scroll_to_bottom(self):
         """Scroll the chat to the bottom."""
