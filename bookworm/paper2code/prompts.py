@@ -229,6 +229,12 @@ def coding_prompt(
     base = name.rsplit("/", 1)[-1]
     is_test = "tests/" in name or base.startswith("test_") or base.endswith("_test.py")
     test_guidance = (
+        "SCOPE — write tests ONLY for the success criteria listed above; every test "
+        "must map to one. Do NOT invent edge cases the criteria don't state — degenerate "
+        "or singular inputs, error/exception paths, boundary conditions — unless a "
+        "criterion explicitly calls for that behavior. Unanchored edge-case tests assert "
+        "behavior the paper never specifies, so neither the code nor the test can be "
+        "shown correct, and the repair loop cannot converge on them.\n\n"
         "Test-writing priority — most reliable first:\n"
         "1. Prefer INVARIANTS that are true by definition: properties any correct "
         "output must satisfy, checked against the inputs rather than a hand-computed "
@@ -241,7 +247,8 @@ def coding_prompt(
         "you also assert the defining invariant alongside it.\n"
         "Never make a hand-computed 'magic' number the sole assertion — if your "
         "arithmetic is off the test is silently wrong. Favor assertions that cannot be "
-        "hallucinated.\n\n"
+        "hallucinated.\n"
+        "Tag each test with the criterion id it covers in a comment (e.g. `# C3`).\n\n"
     ) if is_test else ""
 
     return (
@@ -263,7 +270,7 @@ def coding_prompt(
         f"- If `{filename}` is not under tests/, write production code only.\n"
         "- Do not put pytest imports, test functions, unittest classes, "
         "fixtures, or assertion-based unit tests in production files.\n"
-        "- Test deterministic behavior, shapes, edge cases, and smoke paths.\n"
+        "- Test deterministic behavior and shapes; cover an edge case only when a success criterion specifies it.\n"
         "- Do not require network access, GPUs, large datasets, or long runs.\n"
         "- Do not add a test-running __main__ block.\n"
         "- A planned entry point may include a minimal guarded CLI or demo.\n"

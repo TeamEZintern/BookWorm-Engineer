@@ -29,6 +29,8 @@ def test_coding_prompt_demands_invariants_for_tests_only():
     assert "INVARIANTS" in test_prompt          # test files steered to invariants
     assert "hallucinated" in test_prompt
     assert "INVARIANTS" not in prod_prompt       # production files untouched
+    assert "Tag each test" not in prod_prompt    # tag rule is test-only
+    assert "block.Tag" not in test_prompt        # no glued lines
 
 
 def test_success_criteria_prompt_carries_invariant_field():
