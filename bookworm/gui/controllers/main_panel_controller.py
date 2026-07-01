@@ -606,15 +606,6 @@ class MainPanelController(QObject):
             }}
         """)
 
-    def _detail_height(self, detail: QTextEdit) -> int:
-        doc = detail.document()
-        content_height = int(doc.size().height())
-        padding = 20
-        min_height = detail.fontMetrics().lineSpacing() + padding
-        max_height = 480
-        height = max(min_height, min(max_height, content_height + padding))
-        return height
-
     def _apply_collapsible_detail_visibility(
         self,
         container: QWidget,
@@ -623,7 +614,13 @@ class MainPanelController(QObject):
     ) -> None:
         detail.setVisible(visible)
         if visible:
-            detail.setFixedHeight(self._detail_height(detail))
+            doc = detail.document()
+            content_height = int(doc.size().height())
+            padding = 20
+            min_height = detail.fontMetrics().lineSpacing() + padding
+            max_height = 480
+            height = max(min_height, min(max_height, content_height + padding))
+            detail.setFixedHeight(height)
         else:
             detail.setFixedHeight(0)
         container.adjustSize()
