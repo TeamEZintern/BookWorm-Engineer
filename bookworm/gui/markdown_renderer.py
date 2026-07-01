@@ -3,10 +3,11 @@
 import re
 from typing import Callable, Dict, Optional
 from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QTextEdit
 
 import markdown
 from pygments.formatters import HtmlFormatter
+
+from bookworm.gui.views.widget.markdown_view import MarkdownView
 
 _MARKDOWN = markdown.Markdown(
     extensions=["fenced_code", "tables", "nl2br", "sane_lists", "codehilite"],
@@ -104,13 +105,13 @@ def render_markdown_html(content: str, colors: Dict[str, str]) -> str:
     return f"<!DOCTYPE html><html><head><style>{css}</style></head><body>{body}</body></html>"
 
 
-def _is_embedded(view) -> bool:
+def _is_embedded(view: MarkdownView) -> bool:
     """True when the view is attached to a visible top-level window."""
     window = view.window()
     return window is not None and window.isVisible()
 
 
-def _adjust_view_height(view) -> None:
+def _adjust_view_height(view: MarkdownView) -> None:
     if not _is_embedded(view):
         return
     doc = view.document()
@@ -118,27 +119,11 @@ def _adjust_view_height(view) -> None:
     view.setFixedHeight(max(height, 20))
 
 
-def _schedule_view_height(view) -> None:
+def _schedule_view_height(view: MarkdownView) -> None:
     QTimer.singleShot(0, lambda: _adjust_view_height(view))
 
 
-def _configure_view(view) -> None:
-    from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QFrame
-
-    view.setReadOnly(True)
-    view.setFrameShape(QFrame.Shape.NoFrame)
-    view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-    view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-    view.setStyleSheet("background: transparent; border-style: none;")
-    view.setTextInteractionFlags(
-        Qt.TextInteractionFlag.TextSelectableByMouse
-        | Qt.TextInteractionFlag.LinksAccessibleByMouse
-    )
-    view.document().setDocumentMargin(0)
-
-
-def _ensure_view_hooks(view) -> None:
+def _ensure_view_hooks(view: MarkdownView) -> None:
     if getattr(view, "_markdown_hooks_ready", False):
         return
     view.document().documentLayout().documentSizeChanged.connect(
@@ -147,29 +132,13 @@ def _ensure_view_hooks(view) -> None:
     view._markdown_hooks_ready = True
 
 
-def create_markdown_view() -> QTextEdit:
+def create_markdown_view() -> MarkdownView:
     """Create an empty read-only rich-text view (populate after adding to layout)."""
-    from PySide6.QtCore import Qt, QUrl
-    from PySide6.QtGui import QDesktopServices
-
-    class MarkdownView(QTextEdit):
-        """Read-only rich text with external link support."""
-
-        def mouseReleaseEvent(self, event) -> None:
-            if event.button() == Qt.MouseButton.LeftButton:
-                anchor = self.anchorAt(event.pos())
-                if anchor:
-                    QDesktopServices.openUrl(QUrl(anchor))
-                    return
-            super().mouseReleaseEvent(event)
-
-    view = MarkdownView()
-    _configure_view(view)
-    return view
+    return MarkdownView()
 
 
 def update_markdown_widget(
-    view,
+    view: MarkdownView,
     content: str,
     colors: Dict[str, str],
     is_valid: Optional[Callable[[], bool]] = None,

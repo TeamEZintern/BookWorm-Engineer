@@ -140,7 +140,7 @@ Each chat is one file: `<working_dir>/.bookworm/chats/<uuid>.json`
 ### Main panel (`MainPanelController`)
 
 - **User messages:** right-aligned `QLabel` bubbles.
-- **Assistant messages:** `QTextEdit` subclass via `markdown_renderer.create_markdown_view()`; HTML from markdown.
+- **Assistant messages:** `MarkdownView`, a subclass of `QTextEdit`; HTML from markdown.
 - **Send flow:**
   1. `on_send_clicked` → `add_message(user)` → `agent_turn_requested.emit()`
   2. `AppController._on_agent_turn_requested` → sync agent history → `AgentRunner.start_turn`
