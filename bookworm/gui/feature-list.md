@@ -178,7 +178,8 @@ bookworm/gui/
 │   │   └── ui_main_panel.py
 │   └── widget/
 │       ├── chat_item.ui
-│       └── ui_chat_item.py
+│       ├── ui_chat_item.py
+│       └── busy_indicator.py
 │
 ├── controllers/
 │   ├── __init__.py

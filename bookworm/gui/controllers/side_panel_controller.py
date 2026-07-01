@@ -22,8 +22,7 @@ from ..models import Chat, default_chat_name
 from ..themes import get_colors
 from ..views.panel.ui_side_panel import Ui_SidePanel
 from ..views.widget.ui_chat_item import Ui_ChatItem
-from ..widgets import BusyIndicator
-
+from ..views.widget.busy_indicator import BusyIndicator
 
 class _ChatItemClickFilter(QObject):
     """Select a chat on click or start inline rename on double-click."""
