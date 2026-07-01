@@ -106,6 +106,16 @@ Agent responses rendered as formatted markdown
 - [x] Special commands should not have anything after that, e.g. `/mode build   Please read my repo` is not valid. In the case that it does, simply remind the user not to type extra things after the special command.
   - [x] For the `/help` command, modify it so it also notes this.
 
+
+### Redo feature
+
+- JSON shows that every agent response has a list of "attempts".
+  - usually only 1 attempt because user may only need the first one, but this allows room for new attempts
+- When asked to redo response, previous attempt is not deleted.
+- User prompt and previous attempt(s) are read by agent
+- Agent appends a new attempt to the agent response.
+- At the bottom of agent response message GUI, there are left-right arrows that can switch between different attempts: e.g. attempts "1/3", "2/3", "3/3".
+
 ---
 
 ## Data Management `DONE`
