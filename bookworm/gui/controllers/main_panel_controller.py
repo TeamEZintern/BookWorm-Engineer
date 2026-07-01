@@ -27,7 +27,7 @@ class MainPanelController(QObject):
 
     messages_changed = Signal()
     draft_changed = Signal()
-    agent_turn_requested = Signal()
+    agent_turn_requested = Signal(object)
     agent_turn_stop_requested = Signal()
     mode_change_requested = Signal(str)
     special_command_submitted = Signal(str)
@@ -334,12 +334,25 @@ class MainPanelController(QObject):
             if include_streaming or message is not self._streaming_message
         ]
 
+    def build_agent_context_for_redo(self, message: Message) -> list[dict]:
+        """Build agent history for redo: prefix through user prompt + prior attempts."""
+        idx = self.messages.index(message)
+        context = [item.to_dict() for item in self.messages[:idx]]
+        for attempt in message.attempts:
+            if not attempt.get("content"):
+                continue
+            context.append(Message.attempt_snapshot_dict(attempt))
+        return context
+
     def set_agent_turn_in_progress(self, in_progress: bool) -> None:
         """Toggle Stop/Send and redo availability while the agent runner is active."""
         self._agent_turn_in_progress = in_progress
         self.mode_button.setEnabled(not in_progress)
         self._update_send_button()
         self._update_redo_buttons()
+        for message in self.messages:
+            if message.role == "assistant":
+                self._update_attempt_nav(message)
 
     def _update_send_button(self) -> None:
         if self._agent_turn_in_progress:
@@ -361,7 +374,11 @@ class MainPanelController(QObject):
         if not self.is_processing:
             return
         if self._streaming_message is not None:
-            self._remove_message(self._streaming_message)
+            if self._streaming_message.discard_empty_active_attempt():
+                self._remove_message(self._streaming_message)
+            else:
+                self._refresh_assistant_parts(self._streaming_message)
+                self._update_attempt_nav(self._streaming_message)
             self._streaming_message = None
         self._streaming_tool_calls = []
         self._streaming_reasoning = ""
@@ -462,10 +479,32 @@ class MainPanelController(QObject):
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
+
+        attempt_nav = QWidget()
+        attempt_layout = QHBoxLayout(attempt_nav)
+        attempt_layout.setContentsMargins(0, 0, 0, 0)
+        attempt_layout.setSpacing(4)
+        prev_btn = QPushButton("🡄")
+        next_btn = QPushButton("🡆")
+        attempt_label = QLabel("1/1")
+        for button in (prev_btn, next_btn):
+            self._style_action_button(button)
+        attempt_label.setStyleSheet(
+            f"color: {self.colors['text_secondary']}; font-size: 12px; background: transparent;"
+        )
+        prev_btn.clicked.connect(lambda: self._step_assistant_attempt(message, -1))
+        next_btn.clicked.connect(lambda: self._step_assistant_attempt(message, 1))
+        attempt_layout.addWidget(prev_btn)
+        attempt_layout.addWidget(attempt_label)
+        attempt_layout.addWidget(next_btn)
+        message.attempt_nav = attempt_nav
+        message.attempt_prev_btn = prev_btn
+        message.attempt_next_btn = next_btn
+        message.attempt_label = attempt_label
+        actions.addWidget(attempt_nav)
+
         copy_btn = QPushButton("\U0001f4cb Copy")
         redo_btn = QPushButton("\u21bb Redo")
-        copy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        redo_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._style_action_button(copy_btn)
         self._style_action_button(redo_btn)
         copy_btn.clicked.connect(
@@ -485,10 +524,59 @@ class MainPanelController(QObject):
         timestamp.setStyleSheet(
             f"color: {self.colors['text_secondary']}; font-size: 11px; background: transparent;"
         )
+        message.timestamp_label = timestamp
         actions.addWidget(timestamp)
         layout.addLayout(actions)
+        self._update_attempt_nav(message)
 
         return container
+
+    def _update_attempt_nav(self, message: Message) -> None:
+        nav = getattr(message, "attempt_nav", None)
+        if nav is None:
+            return
+        visible = message.num_attempts > 1
+        nav.setVisible(visible)
+        label = getattr(message, "attempt_label", None)
+        prev_btn = getattr(message, "attempt_prev_btn", None)
+        next_btn = getattr(message, "attempt_next_btn", None)
+        timestamp = getattr(message, "timestamp_label", None)
+        if label is not None:
+            label.setText(f"{message.active_attempt}/{message.num_attempts}")
+        if prev_btn is not None:
+            prev_btn.setEnabled(
+                visible
+                and message.active_attempt > 1
+                and not self._agent_turn_in_progress
+            )
+        if next_btn is not None:
+            next_btn.setEnabled(
+                visible
+                and message.active_attempt < message.num_attempts
+                and not self._agent_turn_in_progress
+            )
+        if timestamp is not None:
+            timestamp.setText(self._format_timestamp(message.timestamp))
+
+    def _step_assistant_attempt(self, message: Message, delta: int) -> None:
+        if self._agent_turn_in_progress or message is self._streaming_message:
+            return
+        target = message.active_attempt + delta
+        if target < 1 or target > message.num_attempts:
+            return
+        message.set_active_attempt(target)
+        self._refresh_assistant_parts(message)
+        self._update_attempt_nav(message)
+        self.messages_changed.emit()
+
+    def _user_prompt_for_assistant(self, message: Message) -> Optional[Message]:
+        if message not in self.messages:
+            return None
+        idx = self.messages.index(message)
+        for prior in reversed(self.messages[:idx]):
+            if prior.role == "user":
+                return prior
+        return None
 
     def _clear_layout(self, layout: QVBoxLayout) -> None:
         while layout.count() > 0:
@@ -514,9 +602,25 @@ class MainPanelController(QObject):
             }}
         """)
 
-    def _detail_height(self, text: str) -> int:
-        line_count = max(2, min(12, text.count("\n") + 1))
-        return min(220, line_count * self.message_input.fontMetrics().lineSpacing() + 24)
+    def _apply_collapsible_detail_visibility(
+        self,
+        container: QWidget,
+        detail: QTextEdit,
+        visible: bool,
+    ) -> None:
+        detail.setVisible(visible)
+        if visible:
+            doc = detail.document()
+            content_height = int(doc.size().height())
+            padding = 20
+            min_height = detail.fontMetrics().lineSpacing() + padding
+            max_height = 480
+            height = max(min_height, min(max_height, content_height + padding))
+            detail.setFixedHeight(height)
+        else:
+            detail.setFixedHeight(0)
+        container.adjustSize()
+        container.updateGeometry()
 
     def _create_collapsible_detail(self, title: str, body: str) -> QWidget:
         container = QWidget()
@@ -547,14 +651,17 @@ class MainPanelController(QObject):
         detail = QTextEdit()
         self._style_detail_text(detail)
         detail.setPlainText(body)
-        detail.setFixedHeight(self._detail_height(body))
-        detail.setVisible(False)
+        self._apply_collapsible_detail_visibility(container, detail, False)
 
         def on_toggled(checked: bool) -> None:
             toggle.setArrowType(
                 Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow
             )
-            detail.setVisible(checked)
+            self._apply_collapsible_detail_visibility(
+                container,
+                detail,
+                checked,
+            )
             self.refresh_message_layouts()
 
         toggle.toggled.connect(on_toggled)
@@ -578,9 +685,12 @@ class MainPanelController(QObject):
         if getattr(container, "bw_body", None) != body:
             was_visible = detail.isVisible()
             detail.setPlainText(body)
-            detail.setFixedHeight(self._detail_height(body))
-            detail.setVisible(was_visible)
             container.bw_body = body
+            self._apply_collapsible_detail_visibility(
+                container,
+                detail,
+                was_visible,
+            )
 
     def _format_jsonish_text(self, text: str) -> str:
         stripped = (text or "").strip()
@@ -768,13 +878,15 @@ class MainPanelController(QObject):
 
     def _style_action_button(self, button: QPushButton):
         c = self.colors
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setFixedHeight(28)
         button.setStyleSheet(f"""
             QPushButton {{
                 background-color: transparent;
                 color: {c['text_secondary']};
                 border: 1px solid {c['border']};
                 border-radius: 4px;
-                padding: 4px 10px;
+                padding: 4px;
                 font-size: 12px;
             }}
             QPushButton:hover {{
@@ -808,7 +920,7 @@ class MainPanelController(QObject):
         self.messages_changed.emit()
 
     def _redo_assistant_message(self, message: Message):
-        """Remove the agent response and request a new one from the agent."""
+        """Append a new attempt and re-run the agent for the paired user prompt."""
         if (
             self.is_processing
             or self._agent_turn_in_progress
@@ -817,16 +929,27 @@ class MainPanelController(QObject):
             return
         if message not in self.messages:
             return
+        if self._user_prompt_for_assistant(message) is None:
+            return
 
-        self._remove_message(message)
-        self._request_agent_response()
+        message.begin_new_attempt()
+        self._refresh_assistant_parts(message)
+        self._update_attempt_nav(message)
+        self._request_agent_response(redo_message=message)
 
-    def _request_agent_response(self):
+    def _request_agent_response(self, redo_message: Optional[Message] = None):
         """Ask AppController to run the real agent for a response."""
         self.is_processing = True
         self._update_send_button()
-        self.begin_streaming_agent_turn()
-        self.agent_turn_requested.emit()
+        if redo_message is not None:
+            self._streaming_message = redo_message
+            self._streaming_tool_calls = []
+            self._streaming_reasoning = ""
+            self._refresh_assistant_parts(redo_message)
+            self._update_attempt_nav(redo_message)
+        else:
+            self.begin_streaming_agent_turn()
+        self.agent_turn_requested.emit(redo_message)
 
     def begin_streaming_agent_turn(self) -> None:
         """Create a placeholder assistant message for streamed output."""
@@ -887,6 +1010,7 @@ class MainPanelController(QObject):
         if self._streaming_message is not None:
             self._streaming_message.set_final_answer(content)
             self._refresh_assistant_parts(self._streaming_message)
+            self._update_attempt_nav(self._streaming_message)
         self._streaming_message = None
         self._streaming_tool_calls = []
         self._streaming_reasoning = ""
@@ -897,9 +1021,14 @@ class MainPanelController(QObject):
         """Keep partial streamed content when the user stops the agent."""
         if self._streaming_message is not None:
             if not self._streaming_message.parts:
-                self._remove_message(self._streaming_message)
+                if self._streaming_message.discard_empty_active_attempt():
+                    self._remove_message(self._streaming_message)
+                else:
+                    self._refresh_assistant_parts(self._streaming_message)
+                    self._update_attempt_nav(self._streaming_message)
             else:
                 self._refresh_assistant_parts(self._streaming_message)
+                self._update_attempt_nav(self._streaming_message)
         self._streaming_message = None
         self._streaming_tool_calls = []
         self._streaming_reasoning = ""
@@ -928,20 +1057,18 @@ class MainPanelController(QObject):
                 self._error_final_answer_text(error, partial)
             )
             self._refresh_assistant_parts(self._streaming_message)
+            self._update_attempt_nav(self._streaming_message)
             self._streaming_message = None
             self._streaming_tool_calls = []
             self._streaming_reasoning = ""
         else:
-            content: list[dict] = []
+            self.add_message(Message.assistant())
+            assistant = self.messages[-1]
             if detail:
-                content.append({"type": "error_detail", "text": detail})
-            content.append(
-                {
-                    "type": "final_answer",
-                    "text": self._error_final_answer_text(error),
-                }
-            )
-            self.add_message(Message(role="assistant", content=content))
+                assistant.append_error_detail(detail)
+            assistant.set_final_answer(self._error_final_answer_text(error))
+            self._refresh_assistant_parts(assistant)
+            self._update_attempt_nav(assistant)
         self._finish_agent_turn()
         self.messages_changed.emit()
 
@@ -975,6 +1102,12 @@ class MainPanelController(QObject):
                 msg.markdown_views = []
                 msg.part_widgets = []
                 msg.user_bubble = None
+                msg.attempt_nav = None
+                msg.attempt_prev_btn = None
+                msg.attempt_next_btn = None
+                msg.attempt_label = None
+                msg.timestamp_label = None
+                msg.redo_button = None
                 self.messages.append(msg)
                 self.display_message(msg, render_markdown=False)
         finally:

@@ -110,12 +110,14 @@ Each chat is stored as a JSON file on disk inside `.bookworm/chats/`:
 
 ### Chat file schema
 
+User messages use a plain string `content`. Assistant messages store one or more **attempts** (each attempt is a full response snapshot: reasoning, tool calls, final answer, etc.). Redo appends a new attempt without deleting prior ones; `active_attempt` records which attempt the UI last displayed.
+
 ```json
 {
   "id": "20260617-design-gui",
   "name": "Design GUI",
   "created_at": "2026-06-17T10:30:00Z",
-  "updated_at": "2026-06-17T11:15:00Z",
+  "updated_at": "2026-06-17T10:36:00Z",
   "draft": "",
   "messages": [
     {
@@ -125,48 +127,71 @@ Each chat is stored as a JSON file on disk inside `.bookworm/chats/`:
     },
     {
       "role": "assistant",
-      "content": [
+      "num_attempts": 2,
+      "active_attempt": 2,
+      "attempts": [
         {
-          "type": "reasoning",
-          "text": "I should inspect the project structure first."
+          "index": 1,
+          "content": [
+            {
+              "type": "final_answer",
+              "text": "Use a two-panel layout with a sidebar and main area."
+            }
+          ],
+          "timestamp": "2026-06-17T10:30:05Z"
         },
         {
-          "type": "tool_call",
-          "id": "call_123",
-          "name": "read_file",
-          "arguments": "{\"file_path\":\"AGENTS.md\"}"
-        },
-        {
-          "type": "tool_result",
-          "tool_call_id": "call_123",
-          "content": "# AGENTS.md\n\nProject instructions..."
-        },
-        {
-          "type": "final_answer",
-          "text": "Here is a proposal..."
+          "index": 2,
+          "content": [
+            {
+              "type": "reasoning",
+              "text": "I should inspect the project structure first."
+            },
+            {
+              "type": "tool_call",
+              "id": "call_123",
+              "name": "read_file",
+              "arguments": "{\"file_path\":\"AGENTS.md\"}"
+            },
+            {
+              "type": "tool_result",
+              "tool_call_id": "call_123",
+              "content": "# AGENTS.md\n\nProject instructions..."
+            },
+            {
+              "type": "final_answer",
+              "text": "Here is a proposal for a side panel plus main panel layout..."
+            }
+          ],
+          "timestamp": "2026-06-17T10:31:22Z"
         }
-      ],
-      "timestamp": "2026-06-17T10:30:05Z"
+      ]
     },
     {
       "role": "user",
-      "content": "Suppose this prompt causes agent to produce an error.",
+      "content": "Suppose this prompt causes the agent to produce an error.",
       "timestamp": "2026-06-17T10:35:00Z"
     },
     {
       "role": "assistant",
-      "content": [
+      "num_attempts": 1,
+      "active_attempt": 1,
+      "attempts": [
         {
-          "type": "error_detail",
-          "text": "es_config': {'type': <DynamicShapesType.BACKED: 'backed'>}, 'local_cache_dir': None}\n(EngineCore_DP0 pid=25) INFO 12-14 20:43:07 [cpu_worker.py:192] auto thread-binding list (id, physical core): [(2, 0), (3, 1)]
-get_mempolicy: Operation not permitted\n"
-        },
-        {
-          "type": "final_answer",
-          "text": "EngineCore encountered an issue. See stack trace (above) for the root cause."
+          "index": 1,
+          "content": [
+            {
+              "type": "error_detail",
+              "text": "es_config': {'type': <DynamicShapesType.BACKED: 'backed'>}, 'local_cache_dir': None}\n(EngineCore_DP0 pid=25) INFO 12-14 20:43:07 [cpu_worker.py:192] auto thread-binding list (id, physical core): [(2, 0), (3, 1)]\nget_mempolicy: Operation not permitted\n"
+            },
+            {
+              "type": "final_answer",
+              "text": "EngineCore encountered an issue. See stack trace (above) for the root cause."
+            }
+          ],
+          "timestamp": "2026-06-17T10:36:00Z"
         }
-      ],
-      "timestamp": "2026-06-17T10:36:00Z"
+      ]
     }
   ]
 }
