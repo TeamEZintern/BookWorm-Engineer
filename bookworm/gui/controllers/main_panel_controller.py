@@ -484,12 +484,10 @@ class MainPanelController(QObject):
         attempt_layout = QHBoxLayout(attempt_nav)
         attempt_layout.setContentsMargins(0, 0, 0, 0)
         attempt_layout.setSpacing(4)
-        prev_btn = QPushButton("\u2039")
-        next_btn = QPushButton("\u203a")
+        prev_btn = QPushButton("🡄")
+        next_btn = QPushButton("🡆")
         attempt_label = QLabel("1/1")
         for button in (prev_btn, next_btn):
-            button.setFixedWidth(28)
-            button.setCursor(Qt.CursorShape.PointingHandCursor)
             self._style_action_button(button)
         attempt_label.setStyleSheet(
             f"color: {self.colors['text_secondary']}; font-size: 12px; background: transparent;"
@@ -507,8 +505,6 @@ class MainPanelController(QObject):
 
         copy_btn = QPushButton("\U0001f4cb Copy")
         redo_btn = QPushButton("\u21bb Redo")
-        copy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        redo_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._style_action_button(copy_btn)
         self._style_action_button(redo_btn)
         copy_btn.clicked.connect(
@@ -882,13 +878,15 @@ class MainPanelController(QObject):
 
     def _style_action_button(self, button: QPushButton):
         c = self.colors
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setFixedHeight(28)
         button.setStyleSheet(f"""
             QPushButton {{
                 background-color: transparent;
                 color: {c['text_secondary']};
                 border: 1px solid {c['border']};
                 border-radius: 4px;
-                padding: 4px 10px;
+                padding: 4px;
                 font-size: 12px;
             }}
             QPushButton:hover {{
