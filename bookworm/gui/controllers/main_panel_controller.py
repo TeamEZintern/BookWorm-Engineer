@@ -606,9 +606,28 @@ class MainPanelController(QObject):
             }}
         """)
 
-    def _detail_height(self, text: str) -> int:
-        line_count = max(2, min(12, text.count("\n") + 1))
-        return min(220, line_count * self.message_input.fontMetrics().lineSpacing() + 24)
+    def _detail_height(self, detail: QTextEdit) -> int:
+        doc = detail.document()
+        content_height = int(doc.size().height())
+        padding = 20
+        min_height = detail.fontMetrics().lineSpacing() + padding
+        max_height = 480
+        height = max(min_height, min(max_height, content_height + padding))
+        return height
+
+    def _apply_collapsible_detail_visibility(
+        self,
+        container: QWidget,
+        detail: QTextEdit,
+        visible: bool,
+    ) -> None:
+        detail.setVisible(visible)
+        if visible:
+            detail.setFixedHeight(self._detail_height(detail))
+        else:
+            detail.setFixedHeight(0)
+        container.adjustSize()
+        container.updateGeometry()
 
     def _create_collapsible_detail(self, title: str, body: str) -> QWidget:
         container = QWidget()
@@ -639,14 +658,17 @@ class MainPanelController(QObject):
         detail = QTextEdit()
         self._style_detail_text(detail)
         detail.setPlainText(body)
-        detail.setFixedHeight(self._detail_height(body))
-        detail.setVisible(False)
+        self._apply_collapsible_detail_visibility(container, detail, False)
 
         def on_toggled(checked: bool) -> None:
             toggle.setArrowType(
                 Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow
             )
-            detail.setVisible(checked)
+            self._apply_collapsible_detail_visibility(
+                container,
+                detail,
+                checked,
+            )
             self.refresh_message_layouts()
 
         toggle.toggled.connect(on_toggled)
@@ -670,9 +692,12 @@ class MainPanelController(QObject):
         if getattr(container, "bw_body", None) != body:
             was_visible = detail.isVisible()
             detail.setPlainText(body)
-            detail.setFixedHeight(self._detail_height(body))
-            detail.setVisible(was_visible)
             container.bw_body = body
+            self._apply_collapsible_detail_visibility(
+                container,
+                detail,
+                was_visible,
+            )
 
     def _format_jsonish_text(self, text: str) -> str:
         stripped = (text or "").strip()
