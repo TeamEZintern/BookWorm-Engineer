@@ -64,26 +64,40 @@ def test_validate_chat_data_rejects_non_string_draft():
         })
 
 
-def test_validate_chat_data_accepts_error_detail_part():
+def test_validate_chat_data_accepts_assistant_attempts():
     validate_chat_data({
         "id": "x",
-        "name": "Error chat",
+        "name": "Design chat",
         "created_at": "2026-06-17T10:30:00",
         "updated_at": "2026-06-17T11:15:00",
         "messages": [
             {
                 "role": "assistant",
-                "content": [
-                    {"type": "error_detail", "text": "Traceback...\n"},
-                    {"type": "final_answer", "text": "An error occurred."},
+                "num_attempts": 2,
+                "active_attempt": 2,
+                "attempts": [
+                    {
+                        "index": 1,
+                        "content": [
+                            {"type": "final_answer", "text": "First try"},
+                        ],
+                        "timestamp": "2026-06-17T10:30:05Z",
+                    },
+                    {
+                        "index": 2,
+                        "content": [
+                            {"type": "error_detail", "text": "Traceback...\n"},
+                            {"type": "final_answer", "text": "An error occurred."},
+                        ],
+                        "timestamp": "2026-06-17T10:36:00Z",
+                    },
                 ],
-                "timestamp": "2026-06-17T10:36:00Z",
             }
         ],
     })
 
 
-def test_chat_store_loads_chat_with_error_detail(tmp_path):
+def test_chat_store_loads_chat_with_attempts(tmp_path):
     store = ChatStore(tmp_path / "chats")
     chat = Chat(
         chat_id="err-chat",
@@ -91,14 +105,19 @@ def test_chat_store_loads_chat_with_error_detail(tmp_path):
         created_at=datetime(2026, 6, 17, 10, 30, 0),
         updated_at=datetime(2026, 6, 17, 11, 15, 0),
         messages=[
-            {
-                "role": "assistant",
-                "content": [
-                    {"type": "error_detail", "text": "Traceback...\n"},
-                    {"type": "final_answer", "text": "An error occurred."},
+            Message.assistant_from_attempts(
+                attempts=[
+                    {
+                        "index": 1,
+                        "content": [
+                            {"type": "error_detail", "text": "Traceback...\n"},
+                            {"type": "final_answer", "text": "An error occurred."},
+                        ],
+                        "timestamp": datetime(2026, 6, 17, 10, 36, 0),
+                    }
                 ],
-                "timestamp": "2026-06-17T10:36:00Z",
-            }
+                active_attempt=1,
+            ).to_dict()
         ],
     )
     store.add(chat)
@@ -106,7 +125,8 @@ def test_chat_store_loads_chat_with_error_detail(tmp_path):
     reloaded = ChatStore(tmp_path / "chats")
     reloaded.load()
     assert len(reloaded.all()) == 1
-    assert reloaded.get("err-chat").messages[0]["content"][0]["type"] == "error_detail"
+    attempt = reloaded.get("err-chat").messages[0]["attempts"][0]
+    assert attempt["content"][0]["type"] == "error_detail"
 
 
 def test_message_append_error_detail_inserts_before_final_answer():
@@ -131,21 +151,66 @@ def test_message_append_error_detail_appends_when_no_final_answer():
     ]
 
 
-def test_message_error_detail_round_trip_dict():
-    message = Message(
-        role="assistant",
-        content=[
-            {"type": "error_detail", "text": "long stack trace"},
+def test_message_attempt_round_trip_dict():
+    message = Message.assistant_from_attempts(
+        attempts=[
             {
-                "type": "final_answer",
-                "text": "An error occurred. See stack trace above for details.",
+                "index": 1,
+                "content": [
+                    {"type": "final_answer", "text": "First"},
+                ],
+                "timestamp": datetime(2026, 6, 17, 10, 30, 5),
+            },
+            {
+                "index": 2,
+                "content": [
+                    {"type": "final_answer", "text": "Second"},
+                ],
+                "timestamp": datetime(2026, 6, 17, 10, 31, 22),
             },
         ],
+        active_attempt=2,
     )
 
     restored = Message.from_dict(message.to_dict())
-    assert restored.parts == message.parts
-    assert restored.text == "An error occurred. See stack trace above for details."
+    assert restored.num_attempts == 2
+    assert restored.active_attempt == 2
+    assert restored.text == "Second"
+
+
+def test_message_begin_new_attempt_preserves_previous_attempts():
+    message = Message.assistant()
+    message.set_final_answer("First")
+    message.begin_new_attempt()
+    message.set_final_answer("Second")
+
+    assert message.num_attempts == 2
+    assert message.active_attempt == 2
+    assert message.attempts[0]["content"] == [
+        {"type": "final_answer", "text": "First"},
+    ]
+
+
+def test_message_discard_empty_active_attempt():
+    message = Message.assistant_from_attempts(
+        attempts=[
+            {
+                "index": 1,
+                "content": [{"type": "final_answer", "text": "Done"}],
+                "timestamp": datetime(2026, 6, 17, 10, 30, 0),
+            },
+            {
+                "index": 2,
+                "content": [],
+                "timestamp": datetime(2026, 6, 17, 10, 31, 0),
+            },
+        ],
+        active_attempt=2,
+    )
+
+    assert message.discard_empty_active_attempt() is False
+    assert message.num_attempts == 1
+    assert message.active_attempt == 1
 
 
 def test_chat_store_save_load_and_delete(tmp_path):

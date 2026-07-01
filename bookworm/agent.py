@@ -13,6 +13,21 @@ from .tools import ToolRegistry, call_tool
 HALLUNCINATION_THRESHOLD = 0.75
 
 
+def _assistant_parts_from_message(message: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return assistant content parts from the active attempt."""
+    attempts = message.get("attempts")
+    if isinstance(attempts, list) and attempts:
+        active = message.get("active_attempt")
+        for attempt in attempts:
+            if attempt.get("index") == active:
+                content = attempt.get("content", [])
+                return content if isinstance(content, list) else []
+        last = attempts[-1].get("content", [])
+        return last if isinstance(last, list) else []
+    content = message.get("content", [])
+    return content if isinstance(content, list) else []
+
+
 def _api_tool_call_from_part(part: dict[str, Any]) -> dict[str, Any]:
     """Convert a GUI tool_call content part to OpenAI API tool_calls shape."""
     return {
@@ -193,12 +208,14 @@ class Agent:
             role = message.get("role")
             if role not in {"user", "assistant"}:
                 continue
-            content = message.get("content", "")
             if role == "user":
-                self.messages.append({"role": "user", "content": content})
+                self.messages.append(
+                    {"role": "user", "content": message.get("content", "")}
+                )
                 continue
-            if isinstance(content, list):
-                self.messages.extend(_api_messages_from_assistant_parts(content))
+            parts = _assistant_parts_from_message(message)
+            if parts:
+                self.messages.extend(_api_messages_from_assistant_parts(parts))
 
     def run_turn(self, event_handler: TurnEventHandler | None = None) -> str:
         """Run one agent turn, optionally emitting progress events."""

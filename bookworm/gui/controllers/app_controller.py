@@ -23,6 +23,7 @@ from ..agent_runner import AgentRunner
 from ..ask_user_bridge import AskUserBridge
 from ..config import GUIConfig
 from ..models import Chat, ChatStore, Message, default_chat_name
+from ..models import get_active_attempt_content, new_assistant_message_dict
 from ..themes import build_stylesheet
 from ..views.window.ui_main_window import Ui_MainWindow
 from .main_panel_controller import MainPanelController
@@ -120,9 +121,8 @@ class AppController(QObject):
         self.side_panel_controller.apply_theme(self.gui_config.theme)
 
     def _default_welcome_message(self) -> dict:
-        return {
-            "role": "assistant",
-            "content": [
+        return new_assistant_message_dict(
+            [
                 {
                     "type": "final_answer",
                     "text": (
@@ -131,9 +131,8 @@ class AppController(QObject):
                         "chats, and chat with the agent."
                     ),
                 }
-            ],
-            "timestamp": datetime.now().isoformat(),
-        }
+            ]
+        )
 
     def _create_default_chat(self) -> Chat:
         now = datetime.now()
@@ -201,11 +200,7 @@ class AppController(QObject):
         self,
         content: list | None = None,
     ) -> dict:
-        return {
-            "role": "assistant",
-            "content": content or [],
-            "timestamp": datetime.now().isoformat(),
-        }
+        return new_assistant_message_dict(content)
 
     def _ensure_turn_assistant_in_store(self) -> dict | None:
         if not self._turn_chat_id:
@@ -215,16 +210,13 @@ class AppController(QObject):
             return None
         if not chat.messages or chat.messages[-1].get("role") != "assistant":
             chat.messages.append(self._assistant_message_dict())
-        assistant_message = chat.messages[-1]
-        if not isinstance(assistant_message.get("content"), list):
-            assistant_message["content"] = []
-        return assistant_message
+        return chat.messages[-1]
 
     def _append_turn_part_to_store(self, part: dict) -> None:
         assistant_message = self._ensure_turn_assistant_in_store()
         if assistant_message is None:
             return
-        assistant_message["content"].append(part)
+        get_active_attempt_content(assistant_message).append(part)
         chat = self.store.get(self._turn_chat_id)
         if chat is None:
             return
@@ -237,7 +229,7 @@ class AppController(QObject):
         assistant_message = self._ensure_turn_assistant_in_store()
         if assistant_message is None:
             return
-        content = assistant_message["content"]
+        content = get_active_attempt_content(assistant_message)
         if content and content[-1].get("type") == "reasoning":
             content[-1]["text"] = content[-1].get("text", "") + delta
         else:
@@ -254,7 +246,7 @@ class AppController(QObject):
         assistant_message = self._ensure_turn_assistant_in_store()
         if assistant_message is None:
             return
-        content = assistant_message["content"]
+        content = get_active_attempt_content(assistant_message)
         if content and content[-1].get("type") == "final_answer":
             content[-1]["text"] = content[-1].get("text", "") + delta
         else:
@@ -271,7 +263,7 @@ class AppController(QObject):
         assistant_message = self._ensure_turn_assistant_in_store()
         if assistant_message is None:
             return
-        content = assistant_message["content"]
+        content = get_active_attempt_content(assistant_message)
         part = {"type": "error_detail", "text": detail}
         for index, existing in enumerate(content):
             if existing.get("type") == "final_answer":
@@ -289,7 +281,7 @@ class AppController(QObject):
         assistant_message = self._ensure_turn_assistant_in_store()
         if assistant_message is None:
             return ""
-        for part in reversed(assistant_message["content"]):
+        for part in reversed(get_active_attempt_content(assistant_message)):
             if part.get("type") == "final_answer":
                 return part.get("text", "")
         return ""
@@ -298,7 +290,7 @@ class AppController(QObject):
         assistant_message = self._ensure_turn_assistant_in_store()
         if assistant_message is None:
             return
-        parts = assistant_message["content"]
+        parts = get_active_attempt_content(assistant_message)
         for part in reversed(parts):
             if part.get("type") == "final_answer":
                 part["text"] = content
@@ -380,24 +372,16 @@ class AppController(QObject):
         if result == CommandResult.NOT_A_COMMAND:
             return
         if output_messages:
-            self.main_panel_controller.add_message(
-                Message(
-                    role="assistant",
-                    content=[
-                        {
-                            "type": "final_answer",
-                            "text": "\n".join(output_messages),
-                        }
-                    ],
-                )
-            )
+            assistant = Message.assistant()
+            assistant.set_final_answer("\n".join(output_messages))
+            self.main_panel_controller.add_message(assistant)
         if result == CommandResult.EXIT:
             self._save_current_chat()
             self.window.close()
             return
         self.window.statusBar().showMessage("Ready")
 
-    def _on_agent_turn_requested(self) -> None:
+    def _on_agent_turn_requested(self, redo_message=None) -> None:
         if self._agent_runner.is_running():
             self.main_panel_controller.cancel_inflight_agent_request()
             return
@@ -406,7 +390,13 @@ class AppController(QObject):
         self._turn_reasoning = ""
         self.main_panel_controller.set_agent_turn_in_progress(True)
         self.side_panel_controller.set_chat_loading(self._turn_chat_id)
-        self._sync_agent_from_panel()
+        if redo_message is not None:
+            context = self.main_panel_controller.build_agent_context_for_redo(
+                redo_message
+            )
+        else:
+            context = self.main_panel_controller.get_message_dicts()
+        self.agent.load_conversation(context)
         self.window.statusBar().showMessage("Thinking...")
         self._agent_runner.start_turn(self.agent)
 
@@ -425,9 +415,15 @@ class AppController(QObject):
             if chat is not None and chat.messages:
                 last_message = chat.messages[-1]
                 if last_message.get("role") == "assistant":
-                    content = last_message.get("content")
+                    content = get_active_attempt_content(last_message)
                     if not content:
-                        chat.messages.pop()
+                        attempts = last_message.get("attempts", [])
+                        if len(attempts) > 1:
+                            last_message["attempts"] = attempts[:-1]
+                            last_message["num_attempts"] = len(last_message["attempts"])
+                            last_message["active_attempt"] = last_message["attempts"][-1]["index"]
+                        else:
+                            chat.messages.pop()
                 chat.updated_at = datetime.now()
                 self.store.save(chat)
             self.main_panel_controller.detach_inflight_agent_turn()

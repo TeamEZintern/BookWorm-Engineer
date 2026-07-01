@@ -9,7 +9,8 @@ from datetime import datetime
 
 DRAFT_KEY = "draft"
 REQUIRED_CHAT_KEYS = {"id", "name", "created_at", "updated_at", "messages"}
-REQUIRED_MESSAGE_KEYS = {"role", "content", "timestamp"}
+REQUIRED_USER_MESSAGE_KEYS = {"role", "content", "timestamp"}
+REQUIRED_ASSISTANT_MESSAGE_KEYS = {"role", "num_attempts", "active_attempt", "attempts"}
 VALID_ROLES = {"user", "assistant", "system"}
 ASSISTANT_PART_TYPES = {"reasoning", "tool_call", "tool_result", "final_answer", "error_detail"}
 
@@ -29,20 +30,56 @@ def validate_message_data(data: Any) -> None:
     """Validate a single message object from a chat JSON file."""
     if not isinstance(data, dict):
         raise ValueError("message must be an object")
-    missing = REQUIRED_MESSAGE_KEYS - data.keys()
+    role = data.get("role")
+    if role not in VALID_ROLES:
+        raise ValueError(f"invalid message role: {role!r}")
+    if role == "user":
+        _validate_user_message_data(data)
+    elif role == "assistant":
+        _validate_assistant_message_data(data)
+
+
+def _validate_user_message_data(data: dict[str, Any]) -> None:
+    missing = REQUIRED_USER_MESSAGE_KEYS - data.keys()
     if missing:
         raise ValueError(f"message missing required keys: {sorted(missing)}")
-    if data["role"] not in VALID_ROLES:
-        raise ValueError(f"invalid message role: {data['role']!r}")
     if not isinstance(data["timestamp"], str):
         raise ValueError("message timestamp must be a string")
-    if data["role"] == "assistant":
-        if not isinstance(data["content"], list):
-            raise ValueError("assistant message content must be a list")
-        for part in data["content"]:
-            validate_assistant_part(part)
-    elif not isinstance(data["content"], str):
-        raise ValueError("message content must be a string")
+    if not isinstance(data["content"], str):
+        raise ValueError("user message content must be a string")
+
+
+def _validate_assistant_message_data(data: dict[str, Any]) -> None:
+    missing = REQUIRED_ASSISTANT_MESSAGE_KEYS - data.keys()
+    if missing:
+        raise ValueError(f"message missing required keys: {sorted(missing)}")
+    attempts = data["attempts"]
+    if not isinstance(attempts, list) or not attempts:
+        raise ValueError("assistant message attempts must be a non-empty list")
+    if not isinstance(data["num_attempts"], int) or data["num_attempts"] != len(attempts):
+        raise ValueError("assistant num_attempts must match attempts length")
+    if not isinstance(data["active_attempt"], int):
+        raise ValueError("assistant active_attempt must be an integer")
+    if not any(item.get("index") == data["active_attempt"] for item in attempts):
+        raise ValueError("assistant active_attempt must reference an existing attempt")
+    for attempt in attempts:
+        validate_assistant_attempt(attempt)
+
+
+def validate_assistant_attempt(attempt: Any) -> None:
+    if not isinstance(attempt, dict):
+        raise ValueError("assistant attempt must be an object")
+    for key in ("index", "content", "timestamp"):
+        if key not in attempt:
+            raise ValueError(f"assistant attempt missing required key: {key}")
+    if not isinstance(attempt["index"], int):
+        raise ValueError("assistant attempt index must be an integer")
+    if not isinstance(attempt["timestamp"], str):
+        raise ValueError("assistant attempt timestamp must be a string")
+    if not isinstance(attempt["content"], list):
+        raise ValueError("assistant attempt content must be a list")
+    for part in attempt["content"]:
+        validate_assistant_part(part)
 
 
 def validate_assistant_part(part: Any) -> None:
@@ -88,6 +125,38 @@ def validate_chat_data(data: Any) -> None:
         raise ValueError("chat draft must be a string")
     for message in data["messages"]:
         validate_message_data(message)
+
+
+def get_active_attempt_content(message: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the content list for an assistant message's active attempt."""
+    if message.get("role") != "assistant":
+        raise ValueError("expected assistant message")
+    active = message["active_attempt"]
+    for attempt in message["attempts"]:
+        if attempt.get("index") == active:
+            return attempt["content"]
+    return message["attempts"][-1]["content"]
+
+
+def new_assistant_message_dict(
+    content: Optional[list[dict[str, Any]]] = None,
+    *,
+    timestamp: Optional[str] = None,
+) -> dict[str, Any]:
+    """Build a single-attempt assistant message dict for persistence."""
+    ts = timestamp or datetime.now().isoformat()
+    return {
+        "role": "assistant",
+        "num_attempts": 1,
+        "active_attempt": 1,
+        "attempts": [
+            {
+                "index": 1,
+                "content": content or [],
+                "timestamp": ts,
+            }
+        ],
+    }
 
 
 class Chat:
